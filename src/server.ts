@@ -6,11 +6,12 @@ import * as auth from "./tools/auth.js";
 import * as benefits from "./tools/benefits.js";
 import * as dashboard from "./tools/dashboard.js";
 import * as letters from "./tools/letters.js";
+import * as money from "./tools/money.js";
 
 const server = new McpServer({ name: "mymsd", version: "0.1.0" });
 const session = Session.load();
 
-for (const mod of [auth, dashboard, benefits, letters]) mod.register(server, session);
+for (const mod of [auth, dashboard, benefits, letters, money]) mod.register(server, session);
 
 async function main() {
   await server.connect(new StdioServerTransport());

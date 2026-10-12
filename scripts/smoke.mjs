@@ -52,6 +52,9 @@ await tool("mymsd_dashboard");
 await tool("mymsd_profile");
 await tool("mymsd_benefits", { detail: true });
 await tool("mymsd_letters", { unreadOnly: false });
+await tool("mymsd_debt");
+await tool("mymsd_finance");
+await tool("mymsd_cards", { transactions: true });
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 
 p.kill();
