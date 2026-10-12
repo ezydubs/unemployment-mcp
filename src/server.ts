@@ -7,6 +7,7 @@ import * as appointments from "./tools/appointments.js";
 import * as auth from "./tools/auth.js";
 import * as benefits from "./tools/benefits.js";
 import * as dashboard from "./tools/dashboard.js";
+import * as des from "./tools/des.js";
 import * as documents from "./tools/documents.js";
 import * as employment from "./tools/employment.js";
 import * as hardship from "./tools/hardship.js";
@@ -22,7 +23,7 @@ import * as tas from "./tools/tas.js";
 const server = new McpServer({ name: "mymsd", version: "0.1.0" });
 const session = Session.load();
 
-for (const mod of [auth, dashboard, benefits, letters, money, appointments, income, employment, lookups, hardship, medical, housing, applications, tas, profile, documents]) {
+for (const mod of [auth, dashboard, benefits, letters, money, appointments, income, employment, lookups, hardship, medical, housing, applications, tas, profile, documents, des]) {
   mod.register(server, session);
 }
 
