@@ -58,6 +58,10 @@ await tool("mymsd_cards", { transactions: true });
 await tool("mymsd_appointments", { includeLocations: true });
 await tool("mymsd_appointment_check", { reasonIds: ["changeAddress"] });
 await tool("mymsd_income");
+await tool("mymsd_employment_plan");
+await tool("mymsd_jobs");
+await tool("mymsd_job_title_search", { query: "cook" });
+await tool("mymsd_address_search", { query: "1 Queen Street" });
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 
 p.kill();
