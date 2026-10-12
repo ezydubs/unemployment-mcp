@@ -80,5 +80,6 @@ await tool("mymsd_letters_preference", { action: "post", confirm: false });
 await tool("mymsd_job_search_activity", { action: "add", activityDate: "2026-10-10", employerName: "Example Ltd", role: "Cook", applicationMethod: "online", status: "applied", confirm: false });
 await tool("mymsd_rjs_report", { weekCode: "2026-W41", comment: "Applied to 3 jobs", confirm: false });
 await tool("mymsd_upskilling_report", { weekCode: "2026-W41", confirm: false });
+await tool("mymsd_card_set_pin", { cardNo: "0", pin: "0000", confirm: false }); // expected: "no card 0" (the lookup runs before anything is sent)
 
 p.kill();

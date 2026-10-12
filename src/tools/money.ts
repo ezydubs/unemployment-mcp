@@ -1,8 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { day, nzd, result } from "../format.js";
+import { ansiPinBlock, encryptPinBlock, importRsaPublicKey } from "../pin.js";
 import type { Session } from "../session.js";
-import { call } from "./common.js";
+import { call, dryRun } from "./common.js";
 
 type Obj = Record<string, any>;
 
@@ -95,6 +96,33 @@ export function register(server: McpServer, session: Session): void {
         const data = await http.get(transactions ? "/rest/cards/all" : "/rest/cards/summary");
         const shown = cardNo ? { ...data, cards: (data?.cards ?? []).filter((c: Obj) => c.cardNo === cardNo || c.pan === cardNo) } : data;
         return result(summarizeCards(shown, transactions), shown);
+      }),
+  );
+  server.registerTool(
+    "mymsd_card_set_pin",
+    {
+      description:
+        "Set the PIN of a payment card (4 digits), encrypted the way the site does it (AES key wrapped with MSD's RSA key). The PIN itself is never stored or shown. Untested on this account (its card already has a PIN). Dry run unless confirm: true.",
+      inputSchema: { cardNo: z.string().describe("cardNo from mymsd_cards"), pin: z.string().regex(/^\d{4}$/), confirm: z.boolean().default(false) },
+    },
+    ({ cardNo, pin, confirm }) =>
+      call(session, async (http) => {
+        const cards = await http.get("/rest/cards/all");
+        const card = findCard(cards, cardNo);
+        if (!card) throw new Error(`no card ${cardNo}; mymsd_cards lists them`);
+        if (card.hasPinAttemptsBeenExceeded) throw new Error("MyMSD says PIN attempts are exceeded for this card; contact MSD");
+        const request = {
+          method: "POST" as const,
+          path: "/rest/cards/set-pin",
+          body: { pan: card.pan, pinBlock: "<encrypted>", iv: "<random>", expiryDate: card.expiryDate, key: "<wrapped AES key>" },
+        };
+        const effect = `MSD will set a new PIN on card ${card.cardNo} (expires ${day(card.expiryDate)})`;
+        if (!confirm) return dryRun(request, effect);
+        const pem: string = await http.get("/rest/key/card");
+        const enc = encryptPinBlock(ansiPinBlock(pin, card.pan), importRsaPublicKey(pem));
+        const body = { pan: card.pan, pinBlock: enc.pinBlock, iv: enc.iv, expiryDate: card.expiryDate, key: enc.key };
+        const response = await http.post(request.path, body);
+        return result([`PIN set. ${effect}.`], { response, request: { ...request, body: { ...body, pinBlock: "<encrypted>", key: "<wrapped>" } } });
       }),
   );
 }
