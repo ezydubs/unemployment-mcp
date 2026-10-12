@@ -1,18 +1,31 @@
 {
-  "name": "mymsd-mcp",
+  "name": "unemployment-mcp",
   "version": "0.1.0",
-  "description": "MCP server for MyMSD (my.msd.govt.nz): payments, benefits, letters, debt, cards, appointments, wage declarations, employment plan, one-off costs, housing and applications — over the site's own HTTP API, no browser in the loop",
+  "description": "Unemployment MCP 😭 — AI replacing jobless activities: MyMSD (my.msd.govt.nz) and DES (new.my.msd.govt.nz, MSD's jobs site) over their own HTTP APIs, no browser in the loop",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "npm run build && node --test test/*.test.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs"
   },
-  "keywords": ["mcp", "model-context-protocol", "msd", "mymsd", "work-and-income", "new-zealand", "claude"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "msd",
+    "mymsd",
+    "des",
+    "work-and-income",
+    "new-zealand",
+    "jobs",
+    "claude",
+    "unemployment"
+  ],
   "author": "ezydubs",
   "license": "ISC",
   "type": "module",
-  "bin": { "mymsd-mcp": "dist/server.js" },
+  "bin": {
+    "unemployment-mcp": "dist/server.js"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
     "zod": "^4.6.5"
@@ -25,5 +38,12 @@
     "@types/node": "^24.19.1",
     "typescript": "^5.9.3"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=22.13"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ezydubs/unemployment-mcp.git"
+  },
+  "homepage": "https://github.com/ezydubs/unemployment-mcp#readme"
 }
