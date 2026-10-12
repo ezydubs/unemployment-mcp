@@ -30,6 +30,27 @@ export function summarizeOneOffCosts(costs: Obj, data: Obj): string[] {
   return lines;
 }
 
+/** Work and Income's general line, which the outcome texts reference as {{callCentreNum}}. */
+const CALL_CENTRE = "0800 559 009";
+const fillPlaceholders = (r: Obj): string =>
+  String(r.description ?? "")
+    .replace(/\{\{url\}\}/g, r.url ? `${r.urlTitle ?? r.url}: ${r.url}` : (r.urlTitle ?? ""))
+    .replace(/\{\{callCentreNum\}\}/g, CALL_CENTRE);
+
+/** One outcome from GET /rest/data/outcomes?id=: for a drop-off outcome, what to bring to the service centre. Other ids make MSD answer with a client-inquiry record, which is not an outcome. */
+export function summarizeOutcome(o: Obj | undefined, id?: string): string[] {
+  if (!o) return [];
+  const name = id ?? o.id ?? "?";
+  if (typeof o.unavailable === "string") return [`Outcome ${name}: ${o.unavailable}`];
+  if (!Array.isArray(o.clientRequirementGroups)) return [`Outcome ${name}: MSD has no drop-off details for this id (it answered with a client-inquiry record instead); the catalogue's outcome type says what the site offers for it`];
+  const lines = [`Outcome ${o.id ?? name} (${o.type ?? "?"}): ${o.description ?? ""}`.trimEnd()];
+  for (const g of o.clientRequirementGroups as Obj[]) {
+    if (g.description) lines.push(`  ${g.description}`);
+    for (const r of (g.clientRequirements ?? []) as Obj[]) lines.push(`    - ${fillPlaceholders(r)}`);
+  }
+  return lines;
+}
+
 /** The display texts the site substitutes for option codes before posting (ember-intl en translations). */
 export const TEXT = {
   whyNotAssets: { bills: "It’s for a household bill", other: "It’s for something else", saving: "Saving for an essential item" },
@@ -133,17 +154,23 @@ export function register(server: McpServer, session: Session): void {
     "mymsd_one_off_costs",
     {
       description:
-        "'Something has changed → one-off cost': MSD's catalogue of one-off costs (each with the outcome MyMSD offers: apply online, book an appointment, contact MSD) and, for the given hardship types, this client's eligibility and limits for a hardship grant (food, dental, school uniforms, school stationery).",
-      inputSchema: { types: z.array(z.enum(HARDSHIP_TYPES)).default([...HARDSHIP_TYPES]) },
+        "'Something has changed → one-off cost': MSD's catalogue of one-off costs (each with the outcome MyMSD offers: apply online, book an appointment, contact MSD, drop off documents) and, for the given hardship types, this client's eligibility and limits for a hardship grant (food, dental, school uniforms, school stationery). " +
+        "outcomeId (an outcome id from the catalogue, e.g. funeralCosts) adds that outcome's drop-off details: what to bring to the service centre.",
+      inputSchema: {
+        types: z.array(z.enum(HARDSHIP_TYPES)).default([...HARDSHIP_TYPES]),
+        outcomeId: z.string().optional().describe("an outcome id from the catalogue whose drop-off details to fetch, e.g. funeralCosts"),
+      },
     },
-    ({ types }) =>
+    ({ types, outcomeId }) =>
       call(session, async (http) => {
-        const [costs, data, outcomes] = await Promise.all([
+        const [costs, data, outcome] = await Promise.all([
           http.get("/rest/data/oneOffCosts"),
           tolerant(http.get("/rest/hardship/data", { types: types.join(",") })),
-          tolerant(http.get("/rest/data/outcomes")),
+          outcomeId ? tolerant(http.get("/rest/data/outcomes", { id: outcomeId })) : Promise.resolve(undefined),
         ]);
-        return result(summarizeOneOffCosts(costs, data), { ...costs, hardship: data, outcomes });
+        // an id that is not a drop-off outcome makes MSD answer with a client-inquiry record: keep that out of the data
+        const shown = outcome === undefined ? undefined : Array.isArray(outcome?.clientRequirementGroups) || typeof outcome?.unavailable === "string" ? outcome : { id: outcomeId, note: "MSD answered with a client-inquiry record, not an outcome" };
+        return result([...summarizeOneOffCosts(costs, data), ...summarizeOutcome(outcome, outcomeId)], { ...costs, hardship: data, ...(shown !== undefined ? { outcome: shown } : {}) });
       }),
   );
 
