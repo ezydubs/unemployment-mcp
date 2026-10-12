@@ -5,10 +5,11 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { browserAvailable, harvestCookies, harvestStart, openInChrome } from "../browser.js";
 import { readChromeCookies } from "../chrome-cookies.js";
-import { DesError, type DesHttp } from "../des-http.js";
+import { DesError, DesHttp } from "../des-http.js";
 import { DES_NEXT_STEP, type DesSession } from "../des-session.js";
 import { day, nzd, result, type ToolResult } from "../format.js";
 import { NotLoggedInError } from "../http.js";
+import { CookieJar } from "../jar.js";
 import { DES_ORIGIN } from "../paths.js";
 import type { Session } from "../session.js";
 import { dryRun, fail } from "./common.js";
@@ -33,6 +34,9 @@ export const BLOCKING_CAUTIONS = ["APB"];
 const DES_DOMAINS = ["new.my.msd.govt.nz", "identity.msd.govt.nz", "login.realme.govt.nz"];
 
 export const jobUrl = (id: string | number): string => `${DES_ORIGIN}/en/jobs/vacancy/${id}`;
+
+/** a client with no cookies at all, for the public endpoints: a dead session's cookies must not ride along */
+const anonymous = (): DesHttp => new DesHttp(new CookieJar([]));
 
 /** DES errors in tool text; a missing session names the DES sign-in, not MyMSD's. */
 export function desFail(e: unknown): ToolResult {
@@ -168,7 +172,7 @@ export function applyChecks(detail: Obj, today = nzToday()): string[] {
   const problems: string[] = [];
   const a = detail?.applicationForm;
   if (a) problems.push(`you already applied (${a.applicationFormName ?? a.applicationFormId}${a.applicationStage ? `, ${a.applicationStage}` : ""})`);
-  if (v.vacancyStatus && v.vacancyStatus !== "Open") problems.push(`the job is ${v.vacancyStatus}`);
+  if (v.vacancyStatus !== "Open") problems.push(v.vacancyStatus ? `the job is ${v.vacancyStatus}` : "the job's status is unknown");
   if (v.vacancyPosting?.endDate && v.vacancyPosting.endDate < today) problems.push(`applications closed ${day(v.vacancyPosting.endDate)}`);
   if (isBlocked(detail?.client?.specialCautionToken)) problems.push(`your record carries a special-caution flag (${detail.client.specialCautionToken}); the site does not allow online applications — call 0800 779 009`);
   return problems;
@@ -265,7 +269,7 @@ export function register(server: McpServer, session: Session): void {
         if (!(e instanceof NotLoggedInError)) return desFail(e);
       }
     }
-    return fn(des.http).catch(desFail);
+    return fn(anonymous()).catch(desFail);
   };
   const signedIn: Runner = (fn) => des.run(fn).catch(desFail);
   /** for reads that aggregate: a part DES refuses becomes `{ unavailable }` instead of failing the whole call */
@@ -326,7 +330,7 @@ export function register(server: McpServer, session: Session): void {
     },
     async (args) => {
       try {
-        const r = await des.http.api("/bin/sep/v10/refdata.json", undefined, { category: "userLocations", q: args.query, mode: "startswith" });
+        const r = await anonymous().api("/bin/sep/v10/refdata.json", undefined, { category: "userLocations", q: args.query, mode: "startswith" });
         const lines = flattenLocations(r?.results);
         return result([lines.length ? `${r?.total ?? lines.length} match${r?.total === 1 ? "" : "es"} for "${args.query}"` : `No place starts with "${args.query}"`, ...lines], r);
       } catch (e) {
@@ -458,7 +462,14 @@ function registerAccountTools(server: McpServer, session: Session, { signedIn }:
         const request = applyRequest(args.id, args.cv, args.reference, csrf);
         const effect = `an application for "${title}" (job ${args.id}) will be submitted with ${args.cv === "existing" ? "the CV MSD already holds" : "your own CV, which you then email back on the confirmation email"} and reference: ${args.reference}`;
         if (!args.confirm) return dryRun({ method: "POST", path: request.path.replace(/csrf=.*/, "csrf=<__Host-csrf>"), body: request.body }, effect, { job: summarizeJob(detail).slice(0, 3) });
-        const r = (await http.api(request.path, request.body))?.results ?? {};
+        let r: Obj;
+        try {
+          r = (await http.api(request.path, request.body))?.results ?? {};
+        } catch (e) {
+          // never re-send a submission: the session's retry would post a second application
+          if (e instanceof NotLoggedInError) return desFail(new Error("DES's session ended while the application was being submitted; it may or may not have been recorded — check des_applications before applying again"));
+          throw e;
+        }
         return result([`Applied for ${title}: application ${r.applicationFormName ?? "?"} (${r.applicationFormId ?? "?"}).${args.cv === "own" ? " Reply to MSD's confirmation email with your CV attached." : ""}`], r);
       }),
   );

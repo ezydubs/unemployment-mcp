@@ -87,7 +87,7 @@ exactly 15 minutes later, and the identity-provider cookies vanished. The MCP's 
 ## DES (new.my.msd.govt.nz, "MyMSD new") — added 2026-10-12, later the same day
 
 - **Built and tested:** 9 `des_` tools on branch `des` (search, job, locations, matches, profile, applications, apply,
-  CV download, auth), 36 new unit tests (106 total, green). Native all the way: the only trick needed was using
+  CV download, auth), 39 new unit tests (109 total, green). Native all the way: the only trick needed was using
   `node:https` for the sign-in hops, because Node's `fetch` adds a header DES's login servlet refuses.
 - **Verified live:** `des_locations`, `des_search` and `des_job` return real data without any sign-in. The signed-in
   tools correctly say "No DES session" until there is one.

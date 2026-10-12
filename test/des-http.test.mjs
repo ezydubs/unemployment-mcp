@@ -111,3 +111,26 @@ test("fetchFile returns the bytes, type and suggested name; an HTML or JSON answ
   script = [() => json({ message: "API response error", error: { detail: "API returned status 401" } }, 401)];
   await assert.rejects(new DesHttp(jar()).fetchFile("/bin/bff/cv"), NotLoggedInError);
 });
+
+test("the https transport gives up on a hop that never answers", async () => {
+  const { makeHttpsNavigate } = await import("../dist/des-http.js");
+  const net = await import("node:net");
+  const server = net.createServer(() => {}); // accepts the connection and never speaks
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  try {
+    await assert.rejects(makeHttpsNavigate(200)(`https://127.0.0.1:${port}/bin/auth/login`, {}), /timed out/);
+  } finally {
+    server.close();
+  }
+});
+
+test("fetchFile keeps only the base name of the suggested file name and decodes only the RFC 5987 form", async () => {
+  calls = [];
+  const pdf = (disposition) => () => new Response(Buffer.from("x"), { status: 200, headers: { "content-type": "application/pdf", "content-disposition": disposition } });
+  script = [pdf('attachment; filename="../../elsewhere/cv.pdf"'), pdf('attachment; filename="CV 100%.pdf"'), pdf("attachment; filename*=UTF-8''My%20CV.pdf"), pdf("inline")];
+  assert.equal((await new DesHttp(jar()).fetchFile("/bin/bff/cv")).filename, "cv.pdf");
+  assert.equal((await new DesHttp(jar()).fetchFile("/bin/bff/cv")).filename, "CV 100%.pdf");
+  assert.equal((await new DesHttp(jar()).fetchFile("/bin/bff/cv")).filename, "My CV.pdf");
+  assert.equal((await new DesHttp(jar()).fetchFile("/bin/bff/cv")).filename, null);
+});

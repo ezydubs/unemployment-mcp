@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import https from "node:https";
+import { basename } from "node:path";
 import { NotLoggedInError, USER_AGENT } from "./http.js";
 import type { CookieJar } from "./jar.js";
 import { DES_ORIGIN } from "./paths.js";
@@ -25,8 +26,8 @@ export interface NavResponse {
 /** A navigation-style request: GET, or POST of a urlencoded form when `form` is given. */
 export type Navigate = (url: string, headers: Record<string, string>, form?: string) => Promise<NavResponse>;
 
-/** node:https, because fetch() always adds `Sec-Fetch-Mode: cors` and DES's sign-in servlets refuse that with 403. */
-export const httpsNavigate: Navigate = (url, headers, form) =>
+/** node:https, because fetch() always adds `Sec-Fetch-Mode: cors` and DES's sign-in servlets refuse that with 403; a hop that stalls is given up after timeoutMs. */
+export const makeHttpsNavigate = (timeoutMs: number): Navigate => (url, headers, form) =>
   new Promise((resolve, reject) => {
     const u = new URL(url);
     const h: Record<string, string> = { ...headers };
@@ -44,9 +45,29 @@ export const httpsNavigate: Navigate = (url, headers, form) =>
       });
     });
     req.on("error", reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`DES sign-in hop timed out after ${timeoutMs} ms`)));
     if (form !== undefined) req.write(form);
     req.end();
   });
+/** 30 s: generous for B2C, short enough that one stalled hop does not freeze every DES tool */
+export const httpsNavigate: Navigate = makeHttpsNavigate(30_000);
+
+/** The file name a Content-Disposition suggests, reduced to a base name; only the RFC 5987 `filename*=` form is percent-decoded. */
+export function suggestedName(disposition: string): string | null {
+  const star = disposition.match(/filename\*=(?:UTF-8'')?([^;]+)/i)?.[1]?.trim();
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1]?.trim();
+  let name: string | null = null;
+  if (star) {
+    try {
+      name = decodeURIComponent(star);
+    } catch {
+      name = star;
+    }
+  } else if (plain) name = plain;
+  if (!name) return null;
+  const base = basename(name.replace(/\\/g, "/"));
+  return base && base !== "." && base !== ".." ? base : null;
+}
 
 const NAV_HEADERS = { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "accept-language": "en-NZ,en;q=0.9", "upgrade-insecure-requests": "1" };
 type Params = Record<string, string | number | boolean | null | undefined>;
@@ -123,7 +144,6 @@ export class DesHttp {
       if (!res.ok || contentType.includes("json")) await this.parse(res); // a 401, a redirect or an envelope error say why
       throw new DesError("download_failed", `expected a file, got ${contentType || `HTTP ${res.status}`}`, res.status);
     }
-    const raw = res.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)?.[1] ?? null;
-    return { bytes: Buffer.from(await res.arrayBuffer()), contentType, filename: raw ? decodeURIComponent(raw) : null };
+    return { bytes: Buffer.from(await res.arrayBuffer()), contentType, filename: suggestedName(res.headers.get("content-disposition") ?? "") };
   }
 }

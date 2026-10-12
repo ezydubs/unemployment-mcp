@@ -53,6 +53,7 @@ test("des_job with DES cookies but a dead session and no SSO cookie falls back t
   assert.equal(r.isError, undefined);
   assert.match(text(r), /^30071088: Cleaner/);
   assert.equal(calls.length, 2);
+  assert.equal((calls[1].init.headers.cookie ?? "").includes("__Host-"), false, "the public fallback is anonymous: no dead session cookies");
   session.des.forget();
 });
 
@@ -95,6 +96,16 @@ test("des_apply with confirm posts the SPA's body with the csrf token in the que
   assert.equal(calls[1].init.method, "POST");
   assert.deepEqual(JSON.parse(calls[1].init.body), { vacancyId: "30071088", selectedCV: "own", selectedReference: "Yes" });
   assert.match(text(r), /^Applied for Cleaner: application AF-000124 \(a0X1\)\. Reply to MSD's confirmation email with your CV attached\./);
+});
+
+test("a confirmed des_apply whose POST loses the session is not re-sent", async () => {
+  calls = [];
+  script = [() => detail(), () => json({ message: "API response error", error: { detail: "API returned status 401" } }, 401)];
+  const r = await tools.des_apply({ id: "30071088", cv: "existing", reference: "No", confirm: true });
+  assert.equal(r.isError, true);
+  assert.match(text(r), /may or may not have been recorded/);
+  assert.match(text(r), /des_applications/);
+  assert.equal(calls.length, 2, "detail + one POST, no retry");
 });
 
 test("des_matches treats the site's 404 as no matches", async () => {

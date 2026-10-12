@@ -103,6 +103,8 @@ test("apply checks mirror the site's refusals; a clean open job passes; the requ
     "applications closed Thu 1 Oct 2026",
     "your record carries a special-caution flag (XX|APB); the site does not allow online applications — call 0800 779 009",
   ]);
+  assert.deepEqual(t.applyChecks({ vacancyDetails: { vacancyTitle: "x" }, client: {} }, "2026-10-12"), ["the job's status is unknown"], "a detail without a status does not pass");
+  assert.deepEqual(t.applyChecks({}, "2026-10-12"), ["the job's status is unknown"]);
   assert.equal(t.isBlocked("ZZZ"), false);
   assert.equal(t.isBlocked(undefined), false);
   assert.deepEqual(t.applyRequest("30071088", "own", "No", "c/s"), { method: "POST", path: "/bin/sep/vacancy-apply-submit?csrf=c%2Fs", body: { vacancyId: "30071088", selectedCV: "own", selectedReference: "No" } });
