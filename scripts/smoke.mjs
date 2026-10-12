@@ -69,5 +69,7 @@ await tool("mymsd_applications");
 await tool("mymsd_tas");
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 await tool("mymsd_medical_certificate_ready_to_work", { confirm: false });
+await tool("mymsd_declare_wages", { weekStarting: "2026-10-05", wages: [{ employer: "Example Cafe Ltd", type: "hourly", hours: 10, hourlyRate: 25 }], confirm: false });
+await tool("mymsd_declare_wages", { weekStarting: "2026-10-05", didNotWork: true, confirm: false });
 
 p.kill();
