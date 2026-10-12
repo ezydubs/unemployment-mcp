@@ -8,7 +8,7 @@ cards, appointments and availability, income, employment plan, jobs, one-off cos
 certificate, housing, applications, TAS. Actions: declare wages, book/cancel/call-back appointments, update contact
 details, address and accommodation costs, letters by post or email, job-search and obligation reporting, card PIN,
 document upload, hardship application, Housing Register check-in, emergency housing, medical-certificate ready-to-work,
-application steps, TAS, boarder declarations. 40 tools, all prefixed `mymsd_`.
+application steps, TAS, boarder declarations. 42 tools, all prefixed `mymsd_`.
 
 ## Install
 

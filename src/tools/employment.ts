@@ -49,6 +49,10 @@ export function summarizeJobs(data: Obj, desUrl: string): string[] {
   return lines;
 }
 
+export function summarizeCourse(c: Obj): string[] {
+  return [`${c.courseId}: ${c.title}${c.shortDescription ? ` — ${c.shortDescription}` : ""}`, `Provider: ${c.providerName ?? "unknown"}${c.providerEmailId ? ` (${c.providerEmailId})` : ""}`];
+}
+
 export function jobSearchPayload(i: Obj): { path: string; body: Obj } {
   if (i.action === "set_status") {
     if (!i.id || !i.status) throw new Error("set_status needs id and status");
@@ -98,6 +102,17 @@ export function register(server: McpServer, session: Session): void {
       call(session, async (http) => {
         const titles: string[] = await http.get("/rest/applications/jobTitles/findMatches", { jobTitle: query });
         return result([`${titles.length} titles: ${titles.slice(0, 20).join(", ")}`], titles);
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_course",
+    { description: "Detail of a training course MSD refers to (courseId from an upskilling activity or employment-plan activity): title, description, provider.", inputSchema: { courseId: z.string() } },
+    ({ courseId }) =>
+      call(session, async (http) => {
+        const raw = await http.get(`/rest/course/${encodeURIComponent(courseId)}`);
+        const c = raw?.courseDetail ?? raw?.course ?? raw;
+        return result(summarizeCourse(c ?? { courseId }), raw);
       }),
   );
 

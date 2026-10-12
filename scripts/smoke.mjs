@@ -69,6 +69,7 @@ await tool("mymsd_appointment_check", { reasonIds: ["changeAddress"] });
 await tool("mymsd_income");
 await tool("mymsd_employment_plan");
 await tool("mymsd_jobs");
+await tool("mymsd_course", { courseId: "0" }); // expected: an MSD error for an unknown course (proves the path; no course id is known for this account)
 await tool("mymsd_job_title_search", { query: "cook" });
 await tool("mymsd_address_search", { query: "1 Queen Street" });
 await tool("mymsd_one_off_costs", { types: ["food"] });
@@ -91,6 +92,7 @@ await tool("mymsd_rjs_report", { weekCode: "2026-W41", comment: "Applied to 3 jo
 await tool("mymsd_upskilling_report", { weekCode: "2026-W41", confirm: false });
 await tool("mymsd_card_set_pin", { cardNo: "0", pin: "0000", confirm: false }); // expected: "no card 0" (the lookup runs before anything is sent)
 await tool("mymsd_upload_document", { files: [new URL("../README.md", import.meta.url).pathname], evidenceType: "otherId", confirm: false }); // expected: "file type not accepted" (validation runs before anything is sent)
+await tool("mymsd_document_delete", { fileId: "0", scope: "generic", confirm: false });
 await tool("mymsd_hardship_apply", {
   types: ["food"],
   food: { whatHasHappened: "urgentBill", whyHadToPay: "power bill", howMuchPaid: 100, howMuchNeed: 50 },

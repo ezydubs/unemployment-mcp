@@ -5,7 +5,7 @@ import { readChromeCookies } from "../chrome-cookies.js";
 import { result } from "../format.js";
 import { DOMAINS, ORIGIN } from "../paths.js";
 import type { Session } from "../session.js";
-import { fail } from "./common.js";
+import { fail, tolerant } from "./common.js";
 
 const whoami = (s: Session) =>
   s.info?.isAuthenticated ? `Signed in to MyMSD as ${s.info.firstName} (client ${s.info.clientNumber}); last login ${s.info.lastLogin ?? "unknown"}.` : "Not signed in to MyMSD.";
@@ -22,9 +22,10 @@ export function register(server: McpServer, session: Session): void {
         "import_chrome: take the sign-in from Google Chrome's Default profile (be signed in at my.msd.govt.nz there; macOS asks once for Keychain access — choose Always Allow). " +
         "login: open a browser window to sign in with RealMe (uses the optional CloakBrowser when installed; otherwise opens my.msd.govt.nz in your own browser, after which you run import_chrome). " +
         "login_pin: sign in with client number, date of birth and 4-digit PIN; if MyMSD then asks to verify the device, call again with the code it sent. " +
-        "forget: delete the saved session (does not sign you out of RealMe). The session repairs itself silently while your RealMe sign-in lasts.",
+        "forget: delete the saved session (does not sign you out of RealMe). forget_remembered_client / forget_login_method: MyMSD's own 'log in as someone else' and 'forget my preferred login method' for this device. " +
+        "The session repairs itself silently while your RealMe sign-in lasts.",
       inputSchema: {
-        action: z.enum(["status", "import_chrome", "login", "login_pin", "forget"]).default("status"),
+        action: z.enum(["status", "import_chrome", "login", "login_pin", "forget", "forget_remembered_client", "forget_login_method"]).default("status"),
         chromeProfile: z.string().optional().describe('Chrome profile folder, default "Default"'),
         clientNumber: z.string().regex(/^\d{9}$/).optional().describe("login_pin: 9-digit client number"),
         dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("login_pin: YYYY-MM-DD"),
@@ -39,7 +40,8 @@ export function register(server: McpServer, session: Session): void {
         switch (args.action) {
           case "status": {
             if (session.jar.has("my.msd.govt.nz")) await session.ensure().catch(() => {});
-            return result([whoami(session), `Optional browser installed: ${await browserAvailable()}`], session.status());
+            const pendingSso = session.info?.isAuthenticated ? await tolerant(session.http.get("/rest/sso-session")).catch(() => null) : null;
+            return result([whoami(session), `Optional browser installed: ${await browserAvailable()}`], { ...session.status(), pendingSso });
           }
           case "import_chrome": {
             const cookies = await readChromeCookies({ profile: args.chromeProfile, domains: DOMAINS });
@@ -91,6 +93,14 @@ export function register(server: McpServer, session: Session): void {
           case "forget":
             session.forget();
             return result(["Saved MyMSD session deleted."], { sessionFile: session.status().sessionFile });
+          case "forget_remembered_client": {
+            const r = await session.http.post("/rest/session/forget-me");
+            return result(["MyMSD will no longer remember this client on this device: the client number must be typed at the next PIN sign-in."], r);
+          }
+          case "forget_login_method": {
+            const r = await session.http.post("/rest/session/forget-remember-me");
+            return result(["MyMSD forgot the preferred login method for this device."], r);
+          }
         }
       } catch (e) {
         return fail(e);

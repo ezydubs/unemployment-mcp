@@ -124,8 +124,12 @@ export function register(server: McpServer, session: Session): void {
     },
     ({ types }) =>
       call(session, async (http) => {
-        const [costs, data] = await Promise.all([http.get("/rest/data/oneOffCosts"), tolerant(http.get("/rest/hardship/data", { types: types.join(",") }))]);
-        return result(summarizeOneOffCosts(costs, data), { ...costs, hardship: data });
+        const [costs, data, outcomes] = await Promise.all([
+          http.get("/rest/data/oneOffCosts"),
+          tolerant(http.get("/rest/hardship/data", { types: types.join(",") })),
+          tolerant(http.get("/rest/data/outcomes")),
+        ]);
+        return result(summarizeOneOffCosts(costs, data), { ...costs, hardship: data, outcomes });
       }),
   );
 

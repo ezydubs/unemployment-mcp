@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { day, result } from "../format.js";
 import type { Session } from "../session.js";
-import { call, dryRun } from "./common.js";
+import { call, dryRun, tolerant } from "./common.js";
 
 type Obj = Record<string, any>;
 
@@ -129,11 +129,13 @@ export function register(server: McpServer, session: Session): void {
       call(session, async (http) => {
         if (!appointmentId && !reasonIds?.length) throw new Error("give reasonIds (to book) or appointmentId (to reschedule)");
         const ids = reasonIds?.join(",");
-        const [check, availability] = await Promise.all([
+        const [check, availability, datetime] = await Promise.all([
           appointmentId ? Promise.resolve({ reschedule: true }) : http.get("/rest/appointments/check", { reasonIds: ids }),
           http.get("/rest/appointments/availability", appointmentId ? { appointmentId } : { reasonIds: ids, endDate: endDate ?? plus30Days() }),
+          appointmentId ? tolerant(http.get("/rest/appointments/check-datetime", { appointmentId })) : Promise.resolve(null),
         ]);
-        return result(summarizeAvailability(check, availability), { check, availability });
+        const started = datetime && !("unavailable" in datetime) ? [`Appointment ${appointmentId} already started: ${datetime.isPastStartTime ? "yes — MSD will not reschedule it" : "no"}`] : [];
+        return result([...summarizeAvailability(check, availability), ...started], { check, availability, datetime });
       }),
   );
 

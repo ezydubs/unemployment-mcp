@@ -1,4 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { z } from "zod";
 import { day, result } from "../format.js";
 import type { Session } from "../session.js";
@@ -67,14 +69,16 @@ export function register(server: McpServer, session: Session): void {
     "mymsd_applications",
     {
       description:
-        "Benefit applications in progress (working-age or superannuation: reference, date, status, next-step flags), whether online identity verification is allowed and whether document upload is available. With referenceNumber and categoryId it also returns that document category's children/file counts and the files already uploaded (partner: true for the partner's side).",
+        "Benefit applications in progress (working-age or superannuation: reference, date, status, next-step flags), whether online identity verification is allowed and whether document upload is available. With referenceNumber and categoryId it also returns that document category's children/file counts and the files already uploaded (partner: true for the partner's side). attachmentId downloads the PDF of a submitted application (default ~/Downloads/MyMSD-application-<id>.pdf).",
       inputSchema: {
         referenceNumber: z.string().optional(),
         categoryId: z.string().optional().describe('e.g. "0001" identity, "0021" supporting documents'),
         partner: z.boolean().default(false),
+        attachmentId: z.string().optional().describe("application id whose submitted-application PDF to download"),
+        attachmentPath: z.string().optional().describe("absolute path to save that PDF to"),
       },
     },
-    ({ referenceNumber, categoryId, partner }) =>
+    ({ referenceNumber, categoryId, partner, attachmentId, attachmentPath }) =>
       call(session, async (http) => {
         const [data, idv, upload] = await Promise.all([
           http.get("/rest/applications/data"),
@@ -90,7 +94,10 @@ export function register(server: McpServer, session: Session): void {
           ]);
           documents = { category, uploaded };
         }
-        return result(summarizeApplications(data, idv, upload), { ...data, identityVerification: idv, upload, documents });
+        const attachment = attachmentId
+          ? await http.download(`/rest/applications/getApplicationAttachment/${encodeURIComponent(attachmentId)}`, attachmentPath ?? join(homedir(), "Downloads", `MyMSD-application-${attachmentId}.pdf`))
+          : null;
+        return result([...summarizeApplications(data, idv, upload), ...(attachment ? [`Application PDF saved to ${attachment.path}`] : [])], { ...data, identityVerification: idv, upload, documents, attachment });
       }),
   );
 
