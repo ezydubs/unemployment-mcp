@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { day, nzd, result } from "../format.js";
 import type { Session } from "../session.js";
-import { call, tolerant } from "./common.js";
+import { call, dryRun, tolerant } from "./common.js";
 
 type Obj = Record<string, any>;
 const unavailable = (o: Obj | undefined): string | null => (o && typeof o.unavailable === "string" ? o.unavailable : null);
@@ -49,6 +49,20 @@ export function summarizeJobs(data: Obj, desUrl: string): string[] {
   return lines;
 }
 
+export function jobSearchPayload(i: Obj): { path: string; body: Obj } {
+  if (i.action === "set_status") {
+    if (!i.id || !i.status) throw new Error("set_status needs id and status");
+    return { path: "/rest/employment-plan/job-search-activity/status", body: { id: i.id, status: i.status } };
+  }
+  for (const k of ["activityDate", "employerName", "role", "applicationMethod", "status"]) if (!i[k]) throw new Error(`add needs ${k}`);
+  return {
+    path: "/rest/employment-plan/job-search-activity",
+    body: { activityDate: i.activityDate, employerName: i.employerName, role: i.role, applicationMethod: i.applicationMethod, applicationMethodDesc: i.applicationMethodDesc ?? null, status: i.status },
+  };
+}
+export const rjsPayload = (i: Obj) => ({ id: i.id ?? null, weekCode: i.weekCode, comment: i.comment ?? "" });
+export const upskillingPayload = (i: Obj) => ({ weekCode: i.weekCode, startDate: i.startDate ?? null, endDate: i.endDate ?? null, courses: i.courses ?? [] });
+
 export function register(server: McpServer, session: Session): void {
   server.registerTool(
     "mymsd_employment_plan",
@@ -84,6 +98,73 @@ export function register(server: McpServer, session: Session): void {
       call(session, async (http) => {
         const titles: string[] = await http.get("/rest/applications/jobTitles/findMatches", { jobTitle: query });
         return result([`${titles.length} titles: ${titles.slice(0, 20).join(", ")}`], titles);
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_job_search_activity",
+    {
+      description:
+        "Record job-search activity in the employment plan (add: date, employer, role, how you applied — use mymsd_job_title_search for the role — and status) or update one's status (set_status with id). Dry run unless confirm: true.",
+      inputSchema: {
+        action: z.enum(["add", "set_status"]),
+        id: z.string().optional(),
+        activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        employerName: z.string().optional(),
+        role: z.string().optional(),
+        applicationMethod: z.string().optional(),
+        applicationMethodDesc: z.string().optional(),
+        status: z.string().optional(),
+        confirm: z.boolean().default(false),
+      },
+    },
+    (args) =>
+      call(session, async (http) => {
+        const { path, body } = jobSearchPayload(args);
+        const request = { method: "POST" as const, path, body };
+        const effect =
+          args.action === "add" ? `MSD will add job-search activity: ${args.employerName} — ${args.role} on ${day(args.activityDate)}` : `MSD will set job-search activity ${args.id} to ${args.status}`;
+        if (!args.confirm) return dryRun(request, effect);
+        const response = await http.post(path, body);
+        return result([`Recorded. ${effect}.`], { response, request });
+      }),
+  );
+  server.registerTool(
+    "mymsd_rjs_report",
+    {
+      description: "Report job-search activity for a week in the 'report job search' obligation (weekCode from mymsd_employment_plan). Dry run unless confirm: true.",
+      inputSchema: { weekCode: z.string(), comment: z.string().max(30).describe("MSD allows 30 characters"), id: z.string().optional(), confirm: z.boolean().default(false) },
+    },
+    (args) =>
+      call(session, async (http) => {
+        const body = rjsPayload(args);
+        const request = { method: "POST" as const, path: "/rest/traffic-light/rjs-activities", body };
+        const effect = `MSD will record your job-search report for week ${args.weekCode}`;
+        if (!args.confirm) return dryRun(request, effect);
+        const response = await http.post(request.path, body);
+        return result([`Reported. ${effect}.`], { response, request });
+      }),
+  );
+  server.registerTool(
+    "mymsd_upskilling_report",
+    {
+      description: "Report upskilling activity for a week (courses as MSD lists them). Untested on this account. Dry run unless confirm: true.",
+      inputSchema: {
+        weekCode: z.string(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        courses: z.array(z.record(z.string(), z.unknown())).default([]),
+        confirm: z.boolean().default(false),
+      },
+    },
+    (args) =>
+      call(session, async (http) => {
+        const body = upskillingPayload(args);
+        const request = { method: "POST" as const, path: "/rest/traffic-light/upskilling-activities", body };
+        const effect = `MSD will record upskilling for week ${args.weekCode}`;
+        if (!args.confirm) return dryRun(request, effect);
+        const response = await http.post(request.path, body);
+        return result([`Reported. ${effect}.`], { response, request });
       }),
   );
 }

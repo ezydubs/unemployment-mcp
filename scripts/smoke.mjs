@@ -77,5 +77,8 @@ await tool("mymsd_appointment_callback", { contactNumber: "0210000000", reasonId
 await tool("mymsd_contact_update", { workEmail: "example@example.com", confirm: false });
 await tool("mymsd_accommodation_update", { accommodationCosts: { type: "rent", amount: 1, landlordName: "Example" }, confirm: false });
 await tool("mymsd_letters_preference", { action: "post", confirm: false });
+await tool("mymsd_job_search_activity", { action: "add", activityDate: "2026-10-10", employerName: "Example Ltd", role: "Cook", applicationMethod: "online", status: "applied", confirm: false });
+await tool("mymsd_rjs_report", { weekCode: "2026-W41", comment: "Applied to 3 jobs", confirm: false });
+await tool("mymsd_upskilling_report", { weekCode: "2026-W41", confirm: false });
 
 p.kill();
