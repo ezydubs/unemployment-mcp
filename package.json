@@ -24,7 +24,8 @@
   "license": "ISC",
   "type": "module",
   "bin": {
-    "unemployment-mcp": "dist/server.js"
+    "unemployment-mcp": "dist/server.js",
+    "mymsd-logon": "dist/logon.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",

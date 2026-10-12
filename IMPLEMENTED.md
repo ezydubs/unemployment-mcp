@@ -71,3 +71,23 @@ fallback now runs anonymously (no dead session cookies re-sent); `des_apply` ref
 not only when it is something other than Open; the CV file name from the server is reduced to its base name and
 decoded only in its RFC 5987 form; a confirmed `des_apply` whose POST loses the session is **not** re-sent (it says to
 check `des_applications` instead). Minor findings are recorded in the plan ledger as deferred.
+
+## Part 3 — PIN sign-in, so the server signs itself back in — 2026-10-12, night (branch `pin-auto-login` → `main`)
+
+Asked for because the RealMe single sign-on kept dying (an idle MyMSD tab runs a single logout) and every lapse meant
+signing in again in Chrome and importing.
+
+- `src/credentials.ts` — the stored sign-in: `MYMSD_CLIENT_NUMBER` + `MYMSD_DATE_OF_BIRTH` + `MYMSD_PIN`
+  (+ `MYMSD_VERIFY_USING`) in the environment, else `~/.mymsd-mcp/credentials.json` (mode 600); validation names
+  the wrong field; a corrupt file is an error, not silence.
+- `src/session.ts` — `loginWithPin()` (the SPA's `/rest/session/clear` → `POST /session/login/pin` → `GET /rest/session`;
+  a device check sends the code with `/rest/logon/verifydevice/send-code` and keeps the token in the session file),
+  `verifyDevice(code)`, and the fallback order in `establish()`: re-read the session file if another process wrote it →
+  check → single-sign-on replay → stored PIN → only then "sign in again". A rejected PIN is reported with MyMSD's own
+  words; a device check says where the code went and how to finish.
+- `src/logon.ts` → the `mymsd-logon` command (`set | login | verify <code> | status | clear`); `set` stores and signs in
+  at once; nothing it prints contains the PIN, date of birth or full client number.
+- `mymsd_auth login_pin` with no details uses the stored sign-in; `mymsd_auth status` says where the PIN comes from
+  (env / file / none / unusable), never the values.
+- Tests: `test/credentials.test.mjs` (6), `test/logon.test.mjs` (7), 6 more in `test/session.test.mjs` — 130 in all.
+  Live: untested until the PIN is stored (the user does that; the server never had it typed in by the assistant).

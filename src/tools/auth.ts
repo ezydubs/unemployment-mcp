@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { browserAvailable, harvestCookies, openInChrome } from "../browser.js";
 import { readChromeCookies } from "../chrome-cookies.js";
+import { loadPinCredentials } from "../credentials.js";
 import { result } from "../format.js";
 import { DOMAINS, ORIGIN } from "../paths.js";
 import type { Session } from "../session.js";
@@ -9,9 +10,6 @@ import { dryRun, fail, tolerant } from "./common.js";
 
 const whoami = (s: Session) =>
   s.info?.isAuthenticated ? `Signed in to MyMSD as ${s.info.firstName} (client ${s.info.clientNumber}); last login ${s.info.lastLogin ?? "unknown"}.` : "Not signed in to MyMSD.";
-
-/** the device-verification token between a login_pin that triggered a code and the call that supplies it */
-let pendingToken = "";
 
 export function register(server: McpServer, session: Session): void {
   server.registerTool(
@@ -21,9 +19,9 @@ export function register(server: McpServer, session: Session): void {
         "Sign-in state and sign-in actions for MyMSD. status: who is signed in and what cookies are held. " +
         "import_chrome: take the sign-in from Google Chrome's Default profile (be signed in at my.msd.govt.nz there; macOS asks once for Keychain access — choose Always Allow). " +
         "login: open a browser window to sign in with RealMe (uses the optional CloakBrowser when installed; otherwise opens my.msd.govt.nz in your own browser, after which you run import_chrome). " +
-        "login_pin: sign in with client number, date of birth and 4-digit PIN; if MyMSD then asks to verify the device, call again with the code it sent. " +
+        "login_pin: sign in with client number, date of birth and 4-digit PIN — or with no details at all when a PIN sign-in is stored (the mymsd-logon set command, or MYMSD_CLIENT_NUMBER/MYMSD_DATE_OF_BIRTH/MYMSD_PIN in the environment); if MyMSD then asks to verify the device, call again with the code it sent. " +
         "forget: delete the saved session (does not sign you out of RealMe). forget_remembered_client / forget_login_method: MyMSD's own 'log in as someone else' and 'forget my preferred login method' for this device. " +
-        "The session repairs itself silently while your RealMe sign-in lasts.",
+        "The session repairs itself silently while your RealMe sign-in lasts, and after that with the stored PIN sign-in when there is one.",
       inputSchema: {
         action: z.enum(["status", "import_chrome", "login", "login_pin", "forget", "forget_remembered_client", "forget_login_method"]).default("status"),
         chromeProfile: z.string().optional().describe('Chrome profile folder, default "Default"'),
@@ -42,7 +40,8 @@ export function register(server: McpServer, session: Session): void {
           case "status": {
             if (session.jar.has("my.msd.govt.nz")) await session.ensure().catch(() => {});
             const pendingSso = session.info?.isAuthenticated ? await tolerant(session.http.get("/rest/sso-session")).catch(() => null) : null;
-            return result([whoami(session), `Optional browser installed: ${await browserAvailable()}`], { ...session.status(), pendingSso });
+            const st = session.status();
+            return result([whoami(session), `PIN sign-in stored: ${st.pinCredentials}. Optional browser installed: ${await browserAvailable()}`], { ...st, pendingSso });
           }
           case "import_chrome": {
             const cookies = await readChromeCookies({ profile: args.chromeProfile, domains: DOMAINS });
@@ -68,27 +67,23 @@ export function register(server: McpServer, session: Session): void {
           }
           case "login_pin": {
             if (args.code) {
-              const r = await session.http.post("/rest/logon/verifydevice/verify-code", { code: args.code, token: pendingToken, rememberDevice: args.rememberMe ?? true });
-              await session.ensure(true);
-              return result([`Device verified. ${whoami(session)}`], r);
+              const info = await session.verifyDevice(args.code, args.rememberMe ?? true);
+              return result([`Device verified. ${whoami(session)}`], { verifiedDevice: info.verifiedDevice });
             }
-            if (!args.clientNumber || !args.dateOfBirth || !args.pin) {
-              return fail(new Error("login_pin needs clientNumber, dateOfBirth and pin (or code after a verification code was sent)"));
+            const given = args.clientNumber && args.dateOfBirth && args.pin ? { clientNumber: args.clientNumber, dateOfBirth: args.dateOfBirth, pin: args.pin, verifyUsing: args.verifyUsing } : null;
+            const stored = given ? null : loadPinCredentials();
+            if (!given && !stored) {
+              return fail(
+                new Error(
+                  "login_pin needs clientNumber, dateOfBirth and pin — or a stored PIN sign-in (run: mymsd-logon set <client number> <YYYY-MM-DD> <pin>) — or code after a verification code was sent",
+                ),
+              );
             }
-            await session.http.post("/rest/session/clear").catch(() => {});
-            const r = await session.http.post("/session/login/pin", {
-              clientNumber: args.clientNumber,
-              dateOfBirth: args.dateOfBirth,
-              pin: args.pin,
-              rememberMe: String(args.rememberMe ?? true),
-            });
-            const info = await session.check();
-            if (info.isAuthenticated && info.verifiedDevice) return result([`Signed in with PIN. ${whoami(session)}`], r);
-            const sent = await session.http.post("/rest/logon/verifydevice/send-code", { verifyUsing: args.verifyUsing ?? "", token: "", rememberDevice: args.rememberMe ?? true });
-            pendingToken = sent?.token ?? "";
-            return result([`MyMSD sent a verification code to your ${sent?.verificationSentTo ?? "phone or email"}. Call mymsd_auth login_pin again with code.`], {
-              verificationSentTo: sent?.verificationSentTo,
-              clientDetails: sent?.clientDetails,
+            const r = await session.loginWithPin(given ?? stored!.creds, { rememberMe: args.rememberMe ?? true });
+            if (r.signedIn) return result([`Signed in with PIN${stored ? ` (stored, ${stored.source})` : ""}. ${whoami(session)}`], { verifiedDevice: r.info.verifiedDevice, source: stored?.source ?? "arguments" });
+            return result([`MyMSD sent a verification code to your ${r.sentTo}. Call mymsd_auth login_pin again with code (or run: mymsd-logon verify <code>).`], {
+              verificationSentTo: r.sentTo,
+              clientDetails: r.clientDetails,
             });
           }
           case "forget":

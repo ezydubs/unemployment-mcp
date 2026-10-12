@@ -9,3 +9,5 @@ export const DOMAINS = ["my.msd.govt.nz", "new.my.msd.govt.nz", "identity.msd.go
 export const STORE_DIR = process.env.MYMSD_DIR ?? join(homedir(), ".mymsd-mcp");
 export const SESSION_FILE = join(STORE_DIR, "session.json");
 export const PROFILE_DIR = join(STORE_DIR, "profile");
+/** The stored client-number + date-of-birth + PIN sign-in (mymsd-logon set), mode 600. */
+export const CREDENTIALS_FILE = join(STORE_DIR, "credentials.json");

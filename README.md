@@ -66,6 +66,26 @@ each time it is used, so a copy taken from Chrome goes stale once another client
 in any browser signs you out of RealMe entirely after 15 idle minutes** (the site's timeout runs a single logout).
 Close MyMSD tabs you are not using. The server itself never signs you out.
 
+### Or let it sign itself in with your PIN (no more Chrome round trips 😭→😌)
+
+MyMSD also signs in with **client number + date of birth + 4-digit PIN** (set a PIN up under MyMSD's login options if
+you have none). Store it once, yourself, from a terminal — Claude never needs to see it:
+
+```sh
+mymsd-logon set <client number> <YYYY-MM-DD> <pin>        # or: node /path/to/unemployment-mcp/dist/logon.js set …
+```
+
+That writes `~/.mymsd-mcp/credentials.json` (mode 600) and signs in straight away. From then on, whenever the
+single-sign-on replay fails — an idle MyMSD tab killed it, the identity provider forgot you, the Mac slept — the
+server signs in again with the PIN by itself, and a running server picks up a sign-in done from the terminal on its
+next call. `mymsd-logon status` shows what is stored (never the values), `mymsd-logon clear` deletes it. You can put
+`MYMSD_CLIENT_NUMBER`, `MYMSD_DATE_OF_BIRTH` and `MYMSD_PIN` in the MCP registration's `env` instead of the file.
+
+The one step that still needs a person: when MyMSD does not recognise the device it sends a 6-digit code by text or
+email (`mymsd-logon verify <code>` finishes it; the device is then remembered for a year). The PIN sign-in is MyMSD
+only — DES still rides on the identity provider's single sign-on, so `des_auth import_chrome` after a RealMe sign-in
+remains the way in there.
+
 Session file: `~/.mymsd-mcp/session.json` (cookies only, mode 600). `mymsd_auth forget` / `des_auth forget` delete it.
 
 ## Writes are dry runs by default
@@ -83,7 +103,7 @@ CV document on file.
 
 ## Development
 
-`npm test` (offline, invented fixtures — 109 tests), `npm run smoke` (live: every read tool, every write tool as a dry
+`npm test` (offline, invented fixtures — 130 tests), `npm run smoke` (live: every read tool, every write tool as a dry
 run; `SMOKE_IMPORT=1` imports the Chrome sign-in first, `SMOKE_ONLY=des` runs just the DES part). API notes, every
 endpoint and shape, how the sign-ins work: `NATIVE-NOTES.md`. Design: `docs/superpowers/specs/`, plans:
 `docs/superpowers/plans/`. Plain-language state: `STATUS.md`, `IMPLEMENTED.md`.

@@ -30,11 +30,14 @@ exactly 15 minutes later, and the identity-provider cookies vanished. The MCP's 
 
 1. **Habit fix (no code):** after signing in at my.msd.govt.nz, close the tab. The MCP then stays signed in on its own
    for as long as MSD's identity provider remembers you (unknown how long; likely hours).
-2. **Proper fix (small code change, your call):** a PIN fallback. MyMSD also supports "client number + date of birth
-   + 4-digit PIN" and remembers the device (the `longLivedCookie` / `verifiedDeviceCookie` cookies it already set).
-   With a PIN, the MCP can sign in natively with no RealMe involvement at all, so an idle tab can't break it. You would
-   need to set a PIN up in MyMSD (it's under the login options) and the MCP would keep it in the macOS Keychain, not
-   in a file. Say yes/no.
+2. **Proper fix — done (2026-10-12, night): the PIN sign-in.** MyMSD also takes "client number + date of birth +
+   4-digit PIN" and remembers the device (`verifiedDeviceCookie`, a year). The server now falls back to that by itself
+   when the single-sign-on replay fails. You store the details once, yourself, with `mymsd-logon set <client number>
+   <YYYY-MM-DD> <pin>` (file `~/.mymsd-mcp/credentials.json`, mode 600 — a file rather than the Keychain, to keep it
+   simple and portable; the session file beside it already holds cookies of the same strength). Then `/mcp` reconnect
+   once so the server loads the new code. Still a person's job: the 6-digit device code if MyMSD asks for one
+   (`mymsd-logon verify <code>`). DES is not covered by the PIN (it signs in through the identity provider only).
+   Untested live until you have stored the PIN — the endpoints come from the site's own code (§5.3 of NATIVE-NOTES.md).
 
 ## 3. What I need from you (in order)
 

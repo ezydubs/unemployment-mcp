@@ -134,7 +134,7 @@ export class Http {
       if (res.ok) return body;
       const err = (body?.error ?? {}) as { code?: unknown; message?: unknown; data?: unknown };
       const code = String(err.code ?? (res.status === 401 ? "unauthenticated" : `http_${res.status}`));
-      if (res.status === 401 || code.endsWith("unauthenticated")) throw new NotLoggedInError(`MyMSD session has ended (${code})`);
+      if (res.status === 401 || code.endsWith("unauthenticated")) throw new NotLoggedInError(`MyMSD session has ended (${code}${err.message ? `: ${err.message}` : ""})`);
       throw new MsdError(code, String(err.message ?? `HTTP ${res.status}`), res.status, err.data ?? null);
     }
     if (isChallengePage(text)) throw new BotDefenceError("MyMSD's bot defence (F5) challenged the request: the token cookies are missing or stale");

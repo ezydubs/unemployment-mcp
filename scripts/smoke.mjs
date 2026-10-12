@@ -46,9 +46,10 @@ await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clie
 p.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
 console.log("tools:", (await call("tools/list", {})).tools.map((t) => t.name).join(", "));
 
-// SMOKE_IMPORT=1 takes the sign-in from Chrome first (needed once, or after the RealMe sign-in has lapsed); SMOKE_ONLY=des skips the MyMSD part
+// SMOKE_IMPORT=1 takes the sign-in from Chrome first (needed once, or after the RealMe sign-in has lapsed); SMOKE_PIN=1 signs in with the stored PIN; SMOKE_ONLY=des skips the MyMSD part
 if (process.env.SMOKE_ONLY !== "des") {
 if (process.env.SMOKE_IMPORT) await tool("mymsd_auth", { action: "import_chrome" });
+if (process.env.SMOKE_PIN) await tool("mymsd_auth", { action: "login_pin" }); // the stored PIN sign-in (mymsd-logon set)
 await tool("mymsd_auth", { action: "status" });
 // READ TOOLS (added by later tasks)
 await tool("mymsd_dashboard");

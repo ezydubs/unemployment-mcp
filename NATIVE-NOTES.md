@@ -146,6 +146,12 @@ Called by the app on every load and as keep-alive. Expected (not yet observed) w
 - `POST /rest/session/forget-me` (forget the remembered client entirely), `POST /rest/session/forget-remember-me`
   (forget preferred login method only). `GET /rest/sso-session` → `{ timeRemaining: ms|null, returnToUrl: string|null }`
   (tested; pending SSO hand-off back to MyAccount/DES).
+- **Implemented (2026-10-12 night) as the fallback sign-in:** `Session.loginWithPin()` / `verifyDevice()`, used by
+  `Session.establish()` after the SSO replay fails (`SsoDeadError`) or when the jar is empty, with the details from
+  `MYMSD_*` environment variables or `~/.mymsd-mcp/credentials.json` (mode 600; `src/credentials.ts`), stored by the
+  `mymsd-logon` command (`src/logon.ts`). The pending device-verification token lives in `session.json`
+  (`pendingVerification`), so the command and the server can hand the step to each other; the server re-reads
+  `session.json` when its mtime is newer than its own last write (`reloadIfChanged`). Not yet exercised live.
 - Logout = full navigation to `/idpsaml/saml/manual-slo?reason=<user|timeout|forced>`. It is a SAML single-logout and
   ends the B2C SSO session too, so an automated client should **not** call it if it wants silent re-login later.
 
