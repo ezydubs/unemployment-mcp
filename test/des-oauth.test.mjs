@@ -22,22 +22,21 @@ const setup = (script) => {
 };
 
 test("the login URL returns to My jobs", () => {
-  assert.equal(desLoginUrl(), "https://new.my.msd.govt.nz/bin/auth/login?rt=%2Fmy-jobs%2F");
+  assert.equal(desLoginUrl(), "https://new.my.msd.govt.nz/bin/auth/login?rt=%2Fen%2Fjobs%2F");
 });
 
-test("happy path: login → authorize answered from the SSO cookie → auth-redirect sets the session cookies → return page", async () => {
+test("happy path: login → authorize answered from the SSO cookie → auth-redirect sets the session cookies; the return page is never fetched (its status is not the sign-in's)", async () => {
   const { calls, jar, http } = setup([
     () => redirect(AUTHORIZE, ["__Secure-ex=ex1; Path=/bin/auth-redirect; Secure; HttpOnly; SameSite=Lax"]),
     () => redirect("https://new.my.msd.govt.nz/bin/auth-redirect?code=c1&state=s1"),
-    () => redirect("/my-jobs/", ["__Host-ui=ui1; Path=/; Secure; HttpOnly", "__Host-csrf=csrf1; Path=/; Secure", "__Secure-ex=; Path=/bin/auth-redirect; Max-Age=0; Secure; HttpOnly"]),
-    () => page("<html>my jobs</html>"),
+    () => redirect("/en/jobs/", ["__Host-ui=ui1; Path=/; Secure; HttpOnly", "__Host-csrf=csrf1; Path=/; Secure", "__Secure-ex=; Path=/bin/auth-redirect; Max-Age=0; Secure; HttpOnly"]),
+    () => page("would be a 404 on the real site", 404),
   ]);
   await repairDes(http);
-  assert.equal(calls.length, 4);
-  assert.equal(calls[0].url, "https://new.my.msd.govt.nz/bin/auth/login?rt=%2Fmy-jobs%2F");
+  assert.equal(calls.length, 3, "stops after the code exchange");
+  assert.equal(calls[0].url, "https://new.my.msd.govt.nz/bin/auth/login?rt=%2Fen%2Fjobs%2F");
   assert.ok(calls[1].cookie.includes("x-ms-cpim-sso"), "the IdP hop carries the SSO cookie");
   assert.ok(calls[2].cookie.includes("__Secure-ex=ex1"), "the exchange cookie goes to /bin/auth-redirect");
-  assert.equal(calls[3].url, "https://new.my.msd.govt.nz/my-jobs/");
   assert.equal(http.csrfToken(), "csrf1");
   assert.equal(jar.names("new.my.msd.govt.nz").includes("__Secure-ex"), false);
 });
@@ -55,6 +54,7 @@ test("an auto-posting form from the IdP is submitted with its fields", async () 
     () => page("ok"),
   ]);
   await repairDes(http);
+  assert.equal(calls.length, 3);
   assert.equal(calls[2].url, "https://new.my.msd.govt.nz/bin/auth-redirect");
   assert.equal(calls[2].form, "code=c%261&state=s1");
 });

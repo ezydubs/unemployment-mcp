@@ -5,8 +5,8 @@ import { parseAutoPostForm } from "./sso.js";
 
 const HOP_HOSTS = ["new.my.msd.govt.nz", "identity.msd.govt.nz"];
 const MAX_HOPS = 12;
-/** where the sign-in lands: the signed-in "My jobs" page */
-export const DES_RETURN = "/my-jobs/";
+/** where the sign-in lands: the app root (a real URL; the SPA's own return paths are router paths that 404 as plain requests). The sign-in's result is read from /bin/auth/check, never from this page. */
+export const DES_RETURN = "/en/jobs/";
 export const desLoginUrl = (): string => `${DES_ORIGIN}/bin/auth/login?rt=${encodeURIComponent(DES_RETURN)}`;
 
 /**
@@ -25,6 +25,8 @@ export async function repairDes(http: DesHttp): Promise<void> {
     if (r.status >= 300 && r.status < 400 && r.location) {
       url = new URL(r.location, url).toString();
       if (/\/error\//.test(new URL(url).pathname)) throw new SsoDeadError(`DES rejected the sign-in (${url})`);
+      // the code exchange is done once /bin/auth-redirect hands back to the site: the cookies are set, the return page is irrelevant
+      if (u.hostname === "new.my.msd.govt.nz" && u.pathname === "/bin/auth-redirect") return;
       continue;
     }
     if (r.status === 403) throw new SsoDeadError(`${u.pathname} refused the request (403 ${r.body.slice(0, 80).trim()})`);
