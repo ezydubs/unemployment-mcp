@@ -48,6 +48,8 @@ console.log("tools:", (await call("tools/list", {})).tools.map((t) => t.name).jo
 if (process.env.SMOKE_IMPORT) await tool("mymsd_auth", { action: "import_chrome" });
 await tool("mymsd_auth", { action: "status" });
 // READ TOOLS (added by later tasks)
+await tool("mymsd_dashboard");
+await tool("mymsd_profile");
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 
 p.kill();
