@@ -71,5 +71,8 @@ await tool("mymsd_tas");
 await tool("mymsd_medical_certificate_ready_to_work", { confirm: false });
 await tool("mymsd_declare_wages", { weekStarting: "2026-10-05", wages: [{ employer: "Example Cafe Ltd", type: "hourly", hours: 10, hourlyRate: 25 }], confirm: false });
 await tool("mymsd_declare_wages", { weekStarting: "2026-10-05", didNotWork: true, confirm: false });
+await tool("mymsd_appointment_book", { reasonIds: ["changeAddress"], category: "PHONE", date: "2026-11-02 09:00", locationId: "ASMR", confirm: false });
+await tool("mymsd_appointment_cancel", { appointmentId: "0", confirm: false });
+await tool("mymsd_appointment_callback", { contactNumber: "0210000000", reasonIds: ["benefitReapp"], confirm: false });
 
 p.kill();

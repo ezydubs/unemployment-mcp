@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { day, result } from "../format.js";
 import type { Session } from "../session.js";
-import { call } from "./common.js";
+import { call, dryRun } from "./common.js";
 
 type Obj = Record<string, any>;
 
@@ -70,6 +70,36 @@ export function summarizeAvailability(check: Obj, availability: Obj): string[] {
   return lines;
 }
 
+export interface BookInput {
+  reasonIds: string[];
+  category: (typeof CATEGORIES)[number];
+  date: string;
+  locationId: string;
+  notes?: string;
+  appointmentId?: string;
+  clientRequirementTypes?: string[];
+}
+
+/** The `appointment/book` record as the site serialises it (flattened into the POST body). */
+export function bookPayload(i: BookInput) {
+  return {
+    category: i.category,
+    clientRequirementTypes: i.clientRequirementTypes ?? [],
+    date: i.date,
+    ...(i.appointmentId ? { appointmentId: i.appointmentId } : {}),
+    locationId: i.locationId,
+    notes: i.notes ?? "",
+    reasonIds: i.reasonIds,
+  };
+}
+
+/** Why the site itself would refuse to book, from GET /rest/appointments/check; null when booking is allowed. */
+export function bookingBlocked(check: Obj, reschedule: boolean): string | null {
+  if (check?.mustCall) return "MyMSD says to phone MSD to book this appointment (mustCall)";
+  if (check?.limitReached && !(reschedule && check.existing)) return "MyMSD says the appointment limit is reached (limitReached); phone MSD";
+  return null;
+}
+
 export function register(server: McpServer, session: Session): void {
   server.registerTool(
     "mymsd_appointments",
@@ -104,6 +134,76 @@ export function register(server: McpServer, session: Session): void {
           http.get("/rest/appointments/availability", appointmentId ? { appointmentId } : { reasonIds: ids, endDate: endDate ?? plus30Days() }),
         ]);
         return result(summarizeAvailability(check, availability), { check, availability });
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_appointment_book",
+    {
+      description:
+        "Book an appointment with MSD (or reschedule one with appointmentId). Take date, category and locationId from mymsd_appointment_check's slots. " +
+        "Runs MSD's own check first and refuses when it says to phone. Dry run unless confirm: true.",
+      inputSchema: {
+        reasonIds: z.array(z.enum(REASON_IDS)).min(1),
+        category: z.enum(CATEGORIES),
+        date: z.string().describe("slot date-time exactly as returned by mymsd_appointment_check"),
+        locationId: z.string().describe("location id from the availability result"),
+        notes: z.string().max(140).optional(),
+        appointmentId: z.string().optional().describe("existing appointment to reschedule"),
+        clientRequirementTypes: z.array(z.string()).optional(),
+        confirm: z.boolean().default(false),
+      },
+    },
+    (args) =>
+      call(session, async (http) => {
+        const check = await http.get("/rest/appointments/check", { reasonIds: args.reasonIds.join(",") });
+        const blocked = bookingBlocked(check, !!args.appointmentId);
+        if (blocked) throw new Error(blocked);
+        const payload = bookPayload(args);
+        const request = { method: "POST" as const, path: "/rest/appointments/book", body: payload };
+        const effect = `MSD will ${args.appointmentId ? `move appointment ${args.appointmentId} to` : "book a"} ${args.category} appointment on ${day(args.date)} at location ${args.locationId} for ${args.reasonIds.join(", ")}`;
+        if (!args.confirm) return dryRun(request, effect, { check });
+        const response = await http.post(request.path, payload);
+        return result([`Booked. ${effect}.`], { response, request });
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_appointment_cancel",
+    {
+      description: "Cancel a booked appointment (only when mymsd_appointments shows it as cancellable). Dry run unless confirm: true.",
+      inputSchema: { appointmentId: z.string(), confirm: z.boolean().default(false) },
+    },
+    ({ appointmentId, confirm }) =>
+      call(session, async (http) => {
+        const request = { method: "DELETE" as const, path: `/rest/appointments/${encodeURIComponent(appointmentId)}` };
+        const effect = `MSD will cancel appointment ${appointmentId}`;
+        if (!confirm) return dryRun(request, effect);
+        const response = await http.delete(request.path);
+        return result([`Cancelled. ${effect}.`], { response, request });
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_appointment_callback",
+    {
+      description: "Ask MSD to phone you back instead of booking (the benefit-reapplication call-back). Dry run unless confirm: true.",
+      inputSchema: {
+        contactNumber: z.string().describe("phone number to call"),
+        reasonIds: z.array(z.enum(REASON_IDS)).min(1),
+        locationId: z.string().optional(),
+        requestAppointmentType: z.string().optional(),
+        confirm: z.boolean().default(false),
+      },
+    },
+    (args) =>
+      call(session, async (http) => {
+        const payload = { contactNumber: args.contactNumber, locationId: args.locationId ?? null, reasonIds: args.reasonIds, requestAppointmentType: args.requestAppointmentType ?? null };
+        const request = { method: "POST" as const, path: "/rest/appointments/callbacks", body: payload };
+        const effect = `MSD will record a call-back request to ${args.contactNumber} for ${args.reasonIds.join(", ")}`;
+        if (!args.confirm) return dryRun(request, effect);
+        const response = await http.post(request.path, payload);
+        return result([`Requested. ${effect}.`], { response, request });
       }),
   );
 }
