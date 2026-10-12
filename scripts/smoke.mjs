@@ -51,7 +51,16 @@ await tool("mymsd_auth", { action: "status" });
 await tool("mymsd_dashboard");
 await tool("mymsd_profile");
 await tool("mymsd_benefits", { detail: true });
-await tool("mymsd_letters", { unreadOnly: false });
+const letters = await tool("mymsd_letters", { unreadOnly: false });
+// download one letter that is already read, so the smoke changes nothing; saved under the workspace, not ~/Downloads
+try {
+  const list = JSON.parse(letters.split("\n\n").slice(1).join("\n\n"))?.letters ?? [];
+  const read = list.find((l) => l.hasRead);
+  if (read) await tool("mymsd_letter_download", { id: read.id, path: new URL(`../.superpowers/smoke-letter-${read.id}.pdf`, import.meta.url).pathname });
+  else console.log("\n### mymsd_letter_download skipped: no already-read letter to fetch");
+} catch {
+  console.log("\n### mymsd_letter_download skipped: letters not available");
+}
 await tool("mymsd_debt");
 await tool("mymsd_finance");
 await tool("mymsd_cards", { transactions: true });
