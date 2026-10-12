@@ -81,5 +81,12 @@ await tool("mymsd_job_search_activity", { action: "add", activityDate: "2026-10-
 await tool("mymsd_rjs_report", { weekCode: "2026-W41", comment: "Applied to 3 jobs", confirm: false });
 await tool("mymsd_upskilling_report", { weekCode: "2026-W41", confirm: false });
 await tool("mymsd_card_set_pin", { cardNo: "0", pin: "0000", confirm: false }); // expected: "no card 0" (the lookup runs before anything is sent)
+await tool("mymsd_upload_document", { files: [new URL("../README.md", import.meta.url).pathname], evidenceType: "otherId", confirm: false }); // expected: "file type not accepted" (validation runs before anything is sent)
+await tool("mymsd_hardship_apply", {
+  types: ["food"],
+  food: { whatHasHappened: "urgentBill", whyHadToPay: "power bill", howMuchPaid: 100, howMuchNeed: 50 },
+  answers: { chosenCard: "0", hasIncome: true, hasAssets: false, haveAssetsChanged: false, whyNotAssets: "bills", stepsTaken: ["budgetingPlanning"], stepToTake: "reduceCosts", agreeToRepayments: true },
+  confirm: false,
+});
 
 p.kill();
