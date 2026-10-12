@@ -1,0 +1,29 @@
+{
+  "name": "mymsd-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for MyMSD (my.msd.govt.nz): payments, benefits, letters, debt, cards, appointments, wage declarations, employment plan, one-off costs, housing and applications — over the site's own HTTP API, no browser in the loop",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "smoke": "npm run build && node scripts/smoke.mjs"
+  },
+  "keywords": ["mcp", "model-context-protocol", "msd", "mymsd", "work-and-income", "new-zealand", "claude"],
+  "author": "ezydubs",
+  "license": "ISC",
+  "type": "module",
+  "bin": { "mymsd-mcp": "dist/server.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  },
+  "optionalDependencies": {
+    "cloakbrowser": "0.5.11",
+    "playwright-core": "1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": { "node": ">=22.13" }
+}
