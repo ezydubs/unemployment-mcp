@@ -388,3 +388,60 @@ Engines: `/appointments/:appointment_id`, `/appointments/book/{schedule|select-d
 Not available to this client (so the MCP must treat them as optional): `/rest/employment-plan/job-search-activity` (403 HTML),
 `/rest/tas/data` (403 envelope), `/rest/emergency-housing` (403 HTML), `/rest/data/outcomes` (555 envelope).
 Need an id: `/rest/course`, `/rest/documentCategory`, `/rest/applicationStep` (404 bare).
+
+## 11. DES — the "MyMSD new" jobs site (new.my.msd.govt.nz), tested 2026-10-12
+
+- Adobe Experience Manager (publish) hosting a React SPA (TanStack Router, Mantine) at `/en/jobs.html`; `#root` carries
+  `data-mymsd-url="https://my.msd.govt.nz"` and `data-refdata-url="/bin/sep/v10/refdata.json"`. Fastly CDN in front
+  (`x-served-by: cache-akl…`); **no F5 challenge** here — cold plain HTTP works.
+- MyMSD links in with `https://new.my.msd.govt.nz/en/jobs/link?action=jobSearch|jobDetail|jobMatch|profile|getstarted&callingapp=myMSD[&id=]`
+  (`desUrl` + `desBaseParams` from `GET /rest/session`); the page stores the action in sessionStorage and routes.
+
+### 11.1 Transport rules (all tested)
+- API servlets (`/bin/sep/*`, `/bin/auth/check`): JSON in and out. The SPA sends `Content-Type: application/json`,
+  `Accept: application/json`, `x-transaction-id: <uuid>`. **POSTs sit behind Sling's referrer filter**: a POST without a
+  same-origin `Referer` gets 403 `{"servlet":"…DispatcherServlet…","message":"Forbidden","url":…,"status":"403"}`.
+  GETs need nothing special.
+- Navigation servlets (`/bin/auth/login|renew|logout`, `/bin/auth-redirect`) **refuse `Sec-Fetch-Mode: cors`** with 403
+  `{"ok":false,"error":"forbidden"}`. Node's `fetch` (undici) always sets that header, so these are driven with
+  `node:https` directly (curl works too); send Chrome-like navigation headers (`Accept: text/html,…`), no Origin.
+- Response envelope: `{ statusCode, responseId, message, results | result, error?: { detail } }`; success is HTTP 200.
+  `jobseeker-profile` uses `result`, everything else `results`. Unauthenticated `GET /bin/sep/client-profile` → 401
+  `{ "message": "API response error", "error": { "detail": "API returned status 401" } }`; unauthenticated
+  `/bin/sep/vacancies/match` → 500 HTML page. Bad refdata query → Apache 400 "Bad Request".
+
+### 11.2 Auth — OAuth 2 code + PKCE against MSD's B2C, policy `b2c_1a_aem`
+- Cookies (host-only on new.my.msd.govt.nz, all session-scoped): `__Host-a0`/`__Host-a1` (access token), `__Host-ui`
+  (user info), `__Host-csrf` (not HttpOnly — the SPA reads it and passes it as `?csrf=` on apply and renew),
+  `__Secure-i0`/`__Secure-i1` (path `/bin/auth/logout`, the id token), `__Secure-ex` (path `/bin/auth-redirect`; the
+  PKCE verifier/state cookie set by `/bin/auth/login`), `affinity` (load balancer). Logout and a failed login clear them
+  with empty `Set-Cookie`s — Chrome then still lists them, empty, so an import must drop empty values.
+- `GET /bin/auth/login?rt=<return path>[&prompt=1][&ipc=1]` → sets `__Secure-ex`, 302 to
+  `https://identity.msd.govt.nz/12788802-9a58-4268-a186-7a2f554aeee6/b2c_1a_aem/oauth2/v2.0/authorize?response_type=code&client_id=740be4e9-aadd-4091-8f23-fe4706e7f1fb&scope=openid+https%3A%2F%2Fmsdciam.onmicrosoft.com%2F1%2Fsep.des.client%3Aread%3Awrite&redirect_uri=https%3A%2F%2Fnew.my.msd.govt.nz%2Fbin%2Fauth-redirect&code_challenge=…&code_challenge_method=S256&state=…&nonce=…`.
+  Without a B2C SSO cookie that answers 200 HTML: the IdP selection page (`SETTINGS = {"remoteResource":
+  "…/sep_idp_selection.html","api":"CombinedSigninAndSignup",…}`, title "Loading...") offering "Log in with MyMSD" /
+  "Log in with RealMe" — a person is needed. With SSO alive B2C 302s to `/bin/auth-redirect?code=…&state=…`, the server
+  exchanges the code, sets the cookies above and 302s to `rt`. A bare `/bin/auth-redirect` clears the cookies and 302s
+  to `/en/jobs/error/login`.
+- `POST /bin/auth/check` body `{}` or `{"type":"userInfo"}` → `{ authenticated, reason ("no_session"), remaining (s),
+  renew (bool), clientNumber, firstName, lastName, profileCompleteness, profileStatus, migratedUser }` (tested
+  unauthenticated: `{"authenticated":false,"reason":"no_session","remaining":0,"renew":false}`). The SPA polls it every
+  30 s; idle timeout 14 min, idle logout 15 min 15 s; on `renew: true` it loads `/bin/auth/renew?csrf=<__Host-csrf>` in a
+  hidden iframe (B2C `prompt=none`; the landing body contains `{"ok":true|false}`); it stops auto-renewing after 7 idle
+  minutes. `GET /bin/auth/logout?rt=` ends the DES session.
+
+### 11.3 Endpoints (`Ga` in `clientlib-react-app`)
+| Call | Notes |
+|---|---|
+| `POST /bin/sep/vacancies/search` body `{ searchTerms?, filters: { occupationGroups?: string[] (codes), locations?: { regions?: string[] (names), districts?: string[] (names) } } }` | **public, tested.** SPA limits: at least one of the three; `searchTerms` ≤ 50 chars; regions + districts ≤ 10. → `results: { totalVacancies, suitableVacancies: [ { vacancyId, recordId, vacancyTitle, vacancyType (Permanent/Fixed-term/Seasonal/Casual), fullPartTime (Full-time/Part-time), vacancyStatus, payType ("Hourly rate"/"Annual salary"), displayPayOnListing, minimumPay?, maximumPay?, isExternal, workPlaceArrangement (On-site/Remote/Hybrid/Work from home), hasCWSC, searchRelevanceScore, industry {code,value}, occupation {name, occupationCode, occupationGroup {name, occupationGroupCode}}, locations {locationCount, regions[], districts[], suburbs[]}, vacancyPosting {postingURL, startDate, endDate}, company? {name}, match? {score, label} } ] }` |
+| `GET /bin/sep/vacancies/details?vacancyId=` | **public, tested.** Signed in it adds `client { specialCautionToken? }` and, once applied, `applicationForm { applicationFormId, applicationFormName, submittedDateTime, applicationStage }`. `vacancyDetails` = the search shape plus `vacancyDescription` (HTML), `isPublic`, `hireDateType` (Set date/Immediate start/Negotiable), `expectedHireDate`, `employmentEndDate`, `sellingPoint1..3`, `onTheJobTrainingProvided`, `preEmploymentChecks[]`, `workSchedule`, `workDays[]`, `workHours[]`, `weeklyHours`, `experienceRequired`, `locations [{suburb, district, region: {code, value}}]`, `vacancyPosting {postingType External/Internal, postingURL, startDate, endDate}`, `competencies {knowledge[], skills[], strengths[], languageProficiencies [{language, proficiencies[]}]}`, `credentials [{code, value, category}]`, `otherQualifications[]`, `credentialEndorsements[]`. |
+| `GET /bin/sep/vacancies/match?limit=N` | signed in. `results.matchingVacancies[]` (search shape with `locations: [{region, district, suburb}]` and `match {score, label}`); 404 means none. |
+| `GET /bin/sep/client-profile` | signed in. `results: { person { firstName, lastName, email, phone, clientNumber, personOtherStreet/City/PostalCode/Country/State, specialCautionToken, migratedUser }, preference { preferenceId, preferredLanguage {id}, employmentCommunicationPreference (Email / SMS(Text Message) / Both) }, jobseeker { jobseekerId, status Active/Inactive, profileCompleteness Incomplete/Complete } }` |
+| `GET /bin/sep/jobseeker-profile` | signed in. `result: { profileStatus, jobseekerId, hasAnyNzdriversLicence, driverlicence {licencesClass[], endorsements[]}, languageProficiencies[], educations[], workExperienceAvailable, workExperiences[], workSkills[], otherSkills[], strengths[], reliableTransportAvailable, workAvailability {…}, locationsInterested[], jobsInterested[], personal {summary} }`. Editing happens in the AEM form wizard at `/en/forms/jsp` — not an API. |
+| `GET /bin/sep/job-applications` | signed in. `results: { totalApplications, applications: [ { applicationFormId, applicationFormName, submittedDateTime, applicationStage (Submitted / On-Hold / Shortlisted / Return to MSD / Withdrawn / Cancelled / Unsuccessful / Successful), applicationStageReason, vacancy { vacancyId, vacancyTitle, vacancyType, fullPartTime, workplaceArrangement, vacancyStatus, vacancyStatusReason, industry, occupation, locations[] } } ] }` |
+| `POST /bin/sep/vacancy-apply-submit?csrf=<__Host-csrf>` body `{ vacancyId, selectedCV: "existing" \| "own", selectedReference: "Yes" \| "No" }` | signed in. The site's 3-step apply flow: CV choice ("Use a CV I already gave to MSD" / "I will send my own CV" = reply to the confirmation email with it), reference yes/no, review. → `results: { applicationFormId, applicationFormName }`. The SPA refuses to start when the client's `specialCautionToken` decodes as blocking, and shows "Applied" when `applicationForm` already exists. |
+| `GET /bin/sep/v10/refdata.json?category=userLocations&q=<text>&mode=startswith` | **public, tested.** `{ version, category, query, limit: 10, total, results: [ { code, description, category, children[] } ] }` — island → region → district → suburb tree. Other categories: `industry` answers empty, `industries` 400. |
+| `GET /bin/bff/cv` | signed in; downloads the CV MSD holds. |
+
+Saved jobs, saved searches and job notifications are feature-flagged off in the SPA; contact details are changed on
+MyMSD (profile), the DES contact-preferences page only links there.
