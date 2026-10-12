@@ -88,5 +88,10 @@ await tool("mymsd_hardship_apply", {
   answers: { chosenCard: "0", hasIncome: true, hasAssets: false, haveAssetsChanged: false, whyNotAssets: "bills", stepsTaken: ["budgetingPlanning"], stepToTake: "reduceCosts", agreeToRepayments: true },
   confirm: false,
 });
+await tool("mymsd_housing_register_checkin", { hasRelationshipChanged: false, hasChildrenChanged: false, hasIncomeChanged: false, hasLivingSituationOrLodgingCostsChanged: false, confirm: false });
+await tool("mymsd_emergency_housing_request", { contactNumber: "021 000 0000", dateOfNeed: "2026-10-20", numberOfDependents: 0, region: "Auckland", town: "Auckland", confirm: false });
+await tool("mymsd_boarders_declaration", { declarationId: "0", form: {}, confirm: false });
+await tool("mymsd_application_action", { action: "accept_obligations", referenceNumber: "0", confirm: false });
+await tool("mymsd_tas_submit", { payload: { assets: [] }, confirm: false });
 
 p.kill();

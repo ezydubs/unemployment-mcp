@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { result } from "../format.js";
 import type { Session } from "../session.js";
-import { call, tolerant } from "./common.js";
+import { call, dryRun, tolerant } from "./common.js";
 
 type Obj = Record<string, any>;
 
@@ -13,6 +14,29 @@ export function summarizeTas(steps: Obj, data: Obj, payments: Obj): string[] {
     `Accommodation payments on file: ${(payments?.accommodationPayments ?? []).length}`,
   ];
 }
+
+const TAS_KEYS = [
+  "dueBy",
+  "partner",
+  "familyAssistance",
+  "assets",
+  "partnerAssets",
+  "nonCashAssets",
+  "healthAndDisabilityCosts",
+  "partnerHealthAndDisability",
+  "otherHealthAndDisability",
+  "otherEssentialCosts",
+  "childSupport",
+  "businessExpenses",
+  "landlordDetails",
+  "childrenHealthAndDisability",
+  "accommodationCost",
+  "partnerIncome",
+  "client",
+  "income",
+  "accommodationPayments",
+  "reasonableSteps",
+];
 
 export function register(server: McpServer, session: Session): void {
   server.registerTool(
@@ -31,6 +55,25 @@ export function register(server: McpServer, session: Session): void {
           tolerant(http.get("/rest/tas/otherIncomeProps")),
         ]);
         return result(summarizeTas(steps, data, payments), { steps, data, payments, otherIncome });
+      }),
+  );
+
+  server.registerTool(
+    "mymsd_tas_submit",
+    {
+      description:
+        "Submit a Temporary Additional Support application: the payload is the TAS data from mymsd_tas with your changes (same keys: assets, healthAndDisabilityCosts, otherEssentialCosts, childSupport, businessExpenses, landlordDetails, accommodationCost, income, accommodationPayments, reasonableSteps, …). Keys the TAS model does not have are refused. Untested on this account (TAS data is 403 for it). Dry run unless confirm: true.",
+      inputSchema: { payload: z.record(z.string(), z.unknown()), confirm: z.boolean().default(false) },
+    },
+    ({ payload, confirm }) =>
+      call(session, async (http) => {
+        const unknown = Object.keys(payload).filter((k) => !TAS_KEYS.includes(k));
+        if (unknown.length) throw new Error(`unknown TAS keys: ${unknown.join(", ")}`);
+        const request = { method: "POST" as const, path: "/rest/tas/data", body: payload };
+        const effect = "MSD will receive a Temporary Additional Support application";
+        if (!confirm) return dryRun(request, effect);
+        const response = await http.post(request.path, payload);
+        return result([`Submitted. ${effect}.`], { response, request });
       }),
   );
 }
