@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SERVER = fileURLToPath(new URL("../dist/server.js", import.meta.url));
@@ -52,11 +54,11 @@ await tool("mymsd_dashboard");
 await tool("mymsd_profile");
 await tool("mymsd_benefits", { detail: true });
 const letters = await tool("mymsd_letters", { unreadOnly: false });
-// download one letter that is already read, so the smoke changes nothing; saved under the workspace, not ~/Downloads
+// download one letter that is already read, so the smoke changes nothing; saved to the temp dir, never inside the repo
 try {
   const list = JSON.parse(letters.split("\n\n").slice(1).join("\n\n"))?.letters ?? [];
   const read = list.find((l) => l.hasRead);
-  if (read) await tool("mymsd_letter_download", { id: read.id, path: new URL(`../.superpowers/smoke-letter-${read.id}.pdf`, import.meta.url).pathname });
+  if (read) await tool("mymsd_letter_download", { id: read.id, path: join(tmpdir(), `mymsd-smoke-letter-${read.id}.pdf`) });
   else console.log("\n### mymsd_letter_download skipped: no already-read letter to fetch");
 } catch {
   console.log("\n### mymsd_letter_download skipped: letters not available");
@@ -85,7 +87,7 @@ await tool("mymsd_appointment_book", { reasonIds: ["changeAddress"], category: "
 await tool("mymsd_appointment_cancel", { appointmentId: "0", confirm: false });
 await tool("mymsd_appointment_callback", { contactNumber: "0210000000", reasonIds: ["benefitReapp"], confirm: false });
 await tool("mymsd_contact_update", { workEmail: "example@example.com", confirm: false });
-await tool("mymsd_accommodation_update", { accommodationCosts: { type: "rent", amount: 1, landlordName: "Example" }, confirm: false });
+await tool("mymsd_accommodation_update", { accommodationCosts: { type: "rent", dateChanged: "2026-10-01", landlordName: "Example", costs: [{ type: "rent", amount: 1, frequency: "weekly" }] }, confirm: false });
 await tool("mymsd_letters_preference", { action: "post", confirm: false });
 await tool("mymsd_job_search_activity", { action: "add", activityDate: "2026-10-10", employerName: "Example Ltd", role: "Cook", applicationMethod: "online", status: "applied", confirm: false });
 await tool("mymsd_rjs_report", { weekCode: "2026-W41", comment: "Applied to 3 jobs", confirm: false });

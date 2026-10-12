@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { day, nzd, result } from "../format.js";
+import { day, isoDate, nzd, result } from "../format.js";
 import type { Session } from "../session.js";
 import { call, dryRun } from "./common.js";
 
@@ -51,7 +51,7 @@ export const hourlyWage = (w: Wage): number => (w.type === "hourly" ? w.hourlyRa
 
 /** Builds `income/declaration.toJSON()` exactly as the site's wage model would, refusing anything the site's own validation would. */
 export function buildDeclaration(i: DeclarationInput) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(i.weekStarting) || Number.isNaN(Date.parse(i.weekStarting))) throw new Error("weekStarting must be a date, YYYY-MM-DD");
+  isoDate(i.weekStarting, "weekStarting");
   const dow = new Date(`${i.weekStarting}T00:00:00Z`).getUTCDay();
   if (dow !== 1) throw new Error(`weekStarting must be the Monday of the week being declared (${i.weekStarting} is a ${DAY_NAMES[dow]})`);
   let wages: Wage[];

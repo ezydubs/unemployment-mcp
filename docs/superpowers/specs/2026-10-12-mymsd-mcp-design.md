@@ -163,7 +163,7 @@ login.realme.govt.nz, then `ensure()`; reports who is signed in) · `login` (bro
 | `mymsd_appointment_callback` | `contactNumber`, `reasonIds[]`, `locationId?`, `requestAppointmentType?` | POST appointments/callbacks |
 | `mymsd_contact_update` | any of homeEmail, workEmail, preferredEmail, cellPhone, homePhone, workPhone, fax, preferred | POST client/contacts with the delta against the current client record |
 | `mymsd_accommodation_update` | `residentialAddress?` (+ `dateOfMove`, `livingSituation`), `postalAddress?` or `postalSameAsResidential?`, `accommodationCosts?`, `homePhone?` | POST accommodation |
-| `mymsd_letters_preference` | `action`: `post` \| `email` (`sendPostalMail`) \| `confirm_email` (`email?`, `emailType?`) | POST client/postal-preferences / client/contacts/confirm-email |
+| `mymsd_letters_preference` | `action`: `post` \| `email` (`sendPostalMail`) \| `confirm_email` (`emailAddress?` or `noEmailAddress`, `emailType?`) | POST client/postal-preferences / client/contacts/confirm-email |
 | `mymsd_job_search_activity` | `action` add (activityDate, employerName, role, applicationMethod, applicationMethodDesc?, status) \| set_status (id, status) | POST employment-plan/job-search-activity[/status] |
 | `mymsd_rjs_report` | `weekCode`, `comment`, `id?` | POST traffic-light/rjs-activities |
 | `mymsd_upskilling_report` | `weekCode`, `courses[]` | POST traffic-light/upskilling-activities (untested) |

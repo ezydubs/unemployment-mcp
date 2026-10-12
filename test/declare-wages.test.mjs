@@ -38,6 +38,7 @@ test("did not work is one empty wage", () => {
 test("validation refuses before anything is sent", () => {
   const w = { employer: "X", type: "hourly", hours: 1, hourlyRate: 25 };
   assert.throws(() => buildDeclaration({ weekStarting: "2026-10-06", wages: [w] }), /Monday.*Tuesday/);
+  assert.throws(() => buildDeclaration({ weekStarting: "2026-02-30", didNotWork: true }), /date/, "a date that only exists after JavaScript rolls it over is refused");
   assert.throws(() => buildDeclaration({ weekStarting: "2026-10-05", wages: Array(11).fill(w) }), /10 wages/);
   assert.throws(() => buildDeclaration({ weekStarting: "2026-10-05", wages: [{ employer: "X", type: "weekly", weeklyTotal: 6000, weeklyHours: 40 }] }), /\$5,000/);
   assert.throws(() => buildDeclaration({ weekStarting: "2026-10-05", wages: [{ employer: "X", type: "hourly", hours: 130, hourlyRate: 1 }] }), /120 hours/);

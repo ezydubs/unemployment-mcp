@@ -5,7 +5,7 @@ import { readChromeCookies } from "../chrome-cookies.js";
 import { result } from "../format.js";
 import { DOMAINS, ORIGIN } from "../paths.js";
 import type { Session } from "../session.js";
-import { fail, tolerant } from "./common.js";
+import { dryRun, fail, tolerant } from "./common.js";
 
 const whoami = (s: Session) =>
   s.info?.isAuthenticated ? `Signed in to MyMSD as ${s.info.firstName} (client ${s.info.clientNumber}); last login ${s.info.lastLogin ?? "unknown"}.` : "Not signed in to MyMSD.";
@@ -33,6 +33,7 @@ export function register(server: McpServer, session: Session): void {
         rememberMe: z.boolean().optional().describe("login_pin: remember this client on this device (default true)"),
         code: z.string().regex(/^\d{6}$/).optional().describe("login_pin: the 6-digit device-verification code MyMSD sent"),
         verifyUsing: z.enum(["phone", "email"]).optional().describe("login_pin: where to send the device-verification code"),
+        confirm: z.boolean().default(false).describe("forget_remembered_client / forget_login_method: these change how you sign in on this device; dry run unless true"),
       },
     },
     async (args) => {
@@ -94,12 +95,18 @@ export function register(server: McpServer, session: Session): void {
             session.forget();
             return result(["Saved MyMSD session deleted."], { sessionFile: session.status().sessionFile });
           case "forget_remembered_client": {
-            const r = await session.http.post("/rest/session/forget-me");
-            return result(["MyMSD will no longer remember this client on this device: the client number must be typed at the next PIN sign-in."], r);
+            const request = { method: "POST" as const, path: "/rest/session/forget-me" };
+            const effect = "MyMSD will no longer remember this client on this device (the client number must be typed at the next PIN sign-in)";
+            if (!args.confirm) return dryRun(request, effect);
+            const r = await session.http.post(request.path);
+            return result([`Done. ${effect}.`], { response: r, request });
           }
           case "forget_login_method": {
-            const r = await session.http.post("/rest/session/forget-remember-me");
-            return result(["MyMSD forgot the preferred login method for this device."], r);
+            const request = { method: "POST" as const, path: "/rest/session/forget-remember-me" };
+            const effect = "MyMSD will forget the preferred login method for this device";
+            if (!args.confirm) return dryRun(request, effect);
+            const r = await session.http.post(request.path);
+            return result([`Done. ${effect}.`], { response: r, request });
           }
         }
       } catch (e) {

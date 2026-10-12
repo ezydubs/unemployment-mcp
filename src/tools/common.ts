@@ -2,9 +2,12 @@ import { BotDefenceError, Http, MsdError, NotLoggedInError, NotPermittedError } 
 import { result, type ToolResult } from "../format.js";
 import type { Session } from "../session.js";
 
+const SIGN_IN_HINT = " Sign in: mymsd_auth login, or sign in at my.msd.govt.nz in Chrome and run mymsd_auth import_chrome.";
+
 export function fail(e: unknown): ToolResult {
   let text: string;
-  if (e instanceof MsdError) text = `Error: ${e.code}: ${e.message}${e.data != null ? `\n\n${JSON.stringify(e.data, null, 2)}` : ""}`;
+  if (e instanceof NotLoggedInError) text = `Error: ${e.message}${/mymsd_auth/.test(e.message) ? "" : SIGN_IN_HINT}`;
+  else if (e instanceof MsdError) text = `Error: ${e.code}: ${e.message}${e.data != null ? `\n\n${JSON.stringify(e.data, null, 2)}` : ""}`;
   else if (e instanceof NotPermittedError) text = `Error: not available on this account — ${e.message}`;
   else if (e instanceof BotDefenceError) text = `Error: MyMSD bot defence — ${e.message}`;
   else text = `Error: ${e instanceof Error ? e.message : String(e)}`;

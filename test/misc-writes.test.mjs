@@ -38,4 +38,8 @@ test("application actions map to the site's endpoints", () => {
     body: { applicationReferenceNum: "R1", caseReference: "C1", isOnThePhoneWithMSD: false, files: { "0021": ["f1"] } },
   });
   assert.throws(() => applicationRequest("nope", {}), /action/);
+  assert.throws(() => applicationRequest("complete_identity", { referenceNumber: "R1", caseReference: "C1", uploadAction: "PROVIDED" }), /verificationType/);
+  assert.throws(() => applicationRequest("complete_supporting", { referenceNumber: "R1", caseReference: "C1" }), /uploadAction/);
+  assert.throws(() => applicationRequest("complete_identity", { referenceNumber: "R1", caseReference: "C1", uploadAction: "PROVIDED", verificationType: "BOGUS" }), /verificationType/);
+  assert.throws(() => emergencyHousingPayload({ contactNumber: "021 000 0000", dateOfNeed: "2026-02-30", numberOfDependents: 0, region: "Auckland", town: "Auckland" }), /date/);
 });

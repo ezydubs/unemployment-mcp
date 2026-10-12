@@ -5,6 +5,7 @@ import { nzd, result } from "../format.js";
 import type { Session } from "../session.js";
 import { call, dryRun, tolerant } from "./common.js";
 import { validateFiles } from "./documents.js";
+import { findCard } from "./money.js";
 
 type Obj = Record<string, any>;
 export const HARDSHIP_TYPES = ["food", "dental", "schoolUniforms", "schoolStationery"] as const;
@@ -72,8 +73,22 @@ export interface HardshipInput {
   suppliers?: Obj[];
 }
 
-/** POST /rest/hardship body, built as resources/serializers/hardship builds it from the hardship model. */
-export function serializeHardship(i: HardshipInput, data: Obj, evidenceIds: Record<string, string[]>): Obj {
+/** config/environment maxHardshipAmount */
+export const MAX_HARDSHIP_AMOUNT = 9999.99;
+
+/** Refuses amounts MyMSD itself would not accept: above $9,999.99, or above the type's online maximum from /rest/hardship/data. */
+export function checkHardshipLimits(i: Obj, data: Obj): void {
+  for (const t of i.types ?? []) {
+    const need = Number(i[t]?.howMuchNeed);
+    if (!(need > 0)) throw new Error(`${t}: howMuchNeed must be above 0`);
+    if (need > MAX_HARDSHIP_AMOUNT) throw new Error(`${t}: ${nzd(need)} is above MyMSD's limit of ${nzd(MAX_HARDSHIP_AMOUNT)}`);
+    const max = data?.[t]?.maxAmount;
+    if (max != null && need > Number(max)) throw new Error(`${t}: ${nzd(need)} is above the ${nzd(max)} MSD says you can apply for online`);
+  }
+}
+
+/** POST /rest/hardship body, built as resources/serializers/hardship builds it from the hardship model (no evidence key: uploads are linked by their metadata). */
+export function serializeHardship(i: HardshipInput, data: Obj): Obj {
   const a = i.answers ?? {};
   const stepsTakenCodes: string[] = a.stepsTaken ?? [];
   let steps = stepsTakenCodes.filter((s) => s !== "other");
@@ -108,7 +123,6 @@ export function serializeHardship(i: HardshipInput, data: Obj, evidenceIds: Reco
     agreeToRepayments: !!a.agreeToRepayments,
     cantUpload: !!a.cantUpload,
     types,
-    evidence: evidenceIds,
   };
 }
 
@@ -178,27 +192,29 @@ export function register(server: McpServer, session: Session): void {
           if (!args[t]) throw new Error(`give the ${t} details`);
           if (t !== "food" && !args.answers.cantUpload && !args.evidenceFiles?.[t]?.length) throw new Error(`${t} needs evidenceFiles.${t} (or answers.cantUpload: true)`);
         }
+        checkHardshipLimits(args, data);
+        const cards = await http.get("/rest/cards/summary");
+        if (!findCard(cards, args.answers.chosenCard)) throw new Error(`answers.chosenCard ${args.answers.chosenCard} is not one of your payment cards (mymsd_cards lists them)`);
         const evidencePlan = Object.fromEntries(
           Object.entries(args.evidenceFiles ?? {})
             .filter(([, v]) => v?.length)
             .map(([t, v]) => [t, validateFiles(v!).map((f) => basename(f.path))]),
         );
-        const preview = serializeHardship(args, data, evidencePlan);
-        const request = { method: "POST" as const, path: "/rest/hardship", body: preview };
+        const body = serializeHardship(args, data);
+        const request = { method: "POST" as const, path: "/rest/hardship", body };
         const effect = `MSD will receive a hardship application for ${args.types.join(", ")} (${args.types.map((t) => nzd(args[t]?.howMuchNeed)).join(", ")} needed), loaded to card ${args.answers.chosenCard}`;
         if (!args.confirm) return dryRun(request, effect, { eligibility: data, evidenceUploads: evidencePlan });
-        const evidenceIds: Record<string, string[]> = {};
+        const uploaded: Record<string, string[]> = {};
         for (const [t, paths] of Object.entries(args.evidenceFiles ?? {})) {
           if (!paths?.length) continue;
-          evidenceIds[t] = [];
+          uploaded[t] = [];
           for (const f of validateFiles(paths)) {
             const r = await http.upload(`/rest/hardship/evidence/${t}`, [{ path: f.path, type: f.type }], { workType: "hardship" });
-            evidenceIds[t].push(r?.id);
+            uploaded[t].push(r?.id);
           }
         }
-        const body = serializeHardship(args, data, evidenceIds);
         const response = await http.post("/rest/hardship", body);
-        return result([`Submitted. ${effect}.`], { response, request: { ...request, body } });
+        return result([`Submitted. ${effect}.`], { response, request, evidenceUploaded: uploaded });
       }),
   );
 }

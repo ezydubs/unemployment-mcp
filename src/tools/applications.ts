@@ -33,9 +33,16 @@ export const APPLICATION_ACTIONS = [
   "agree_supporting",
 ] as const;
 
+/** resources/constants/upload-action-type and verification-type */
+export const UPLOAD_ACTIONS = ["PROVIDED", "CANNOTPROVIDE", "TOTALUPLOAD", "PARTIALUPLOAD", "UNABLETOUPLOAD", "ACCEPTBRING", "CANNOTNODOCS"] as const;
+export const VERIFICATION_TYPES = ["PASSPORT", "GOVERNMENT", "NO_IDENTITY", "OTHER_ID"] as const;
+
 /** The request each application step makes (current-applications engine services and resources/constants/endpoints). */
 export function applicationRequest(action: string, i: Obj): { method: "GET" | "POST"; path: string; body?: Obj; params?: Obj } {
   const meta = { applicationReferenceNum: i.referenceNumber, caseReference: i.caseReference };
+  const needUploadAction = () => {
+    if (!(UPLOAD_ACTIONS as readonly string[]).includes(i.uploadAction)) throw new Error(`${action} needs uploadAction, one of ${UPLOAD_ACTIONS.join(", ")}`);
+  };
   switch (action) {
     case "accept_obligations":
       return { method: "POST", path: "/rest/applications/acceptObligations", body: { referenceNumber: i.referenceNumber, ...(i.payload ?? {}) } };
@@ -48,12 +55,15 @@ export function applicationRequest(action: string, i: Obj): { method: "GET" | "P
     case "identity_verification_complete":
       return { method: "POST", path: "/rest/applications/identityVerificationResponse", body: { ...(i.payload ?? {}) } };
     case "complete_identity":
+      needUploadAction();
+      if (!(VERIFICATION_TYPES as readonly string[]).includes(i.verificationType)) throw new Error(`complete_identity needs verificationType, one of ${VERIFICATION_TYPES.join(", ")}`);
       return {
         method: "POST",
         path: "/rest/applicationStep/completeIdentity",
         body: { document: { ...meta, uploadAction: i.uploadAction, applicationIdentity: { isVerified: i.verificationType !== "NO_IDENTITY", verificationType: i.verificationType } } },
       };
     case "complete_supporting":
+      needUploadAction();
       return { method: "POST", path: "/rest/applicationStep/completeSupporting", body: { document: { ...meta, uploadAction: i.uploadAction } } };
     case "agree_identity":
       return { method: "POST", path: "/rest/applicationStep/agreeIdentity", body: { ...meta, isOnThePhoneWithMSD: false, ...(i.payload ?? {}) } };
@@ -113,8 +123,8 @@ export function register(server: McpServer, session: Session): void {
         referenceNumber: z.string(),
         caseReference: z.string().optional(),
         context: z.string().optional(),
-        uploadAction: z.string().optional(),
-        verificationType: z.string().optional(),
+        uploadAction: z.enum(UPLOAD_ACTIONS).optional(),
+        verificationType: z.enum(VERIFICATION_TYPES).optional(),
         payload: z.record(z.string(), z.unknown()).optional(),
         confirm: z.boolean().default(false),
       },

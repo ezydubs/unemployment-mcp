@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { day, nzd, result } from "../format.js";
+import { day, isoDate, nzd, result } from "../format.js";
 import type { Session } from "../session.js";
 import { call, dryRun, tolerant } from "./common.js";
 
@@ -59,6 +59,7 @@ export function jobSearchPayload(i: Obj): { path: string; body: Obj } {
     return { path: "/rest/employment-plan/job-search-activity/status", body: { id: i.id, status: i.status } };
   }
   for (const k of ["activityDate", "employerName", "role", "applicationMethod", "status"]) if (!i[k]) throw new Error(`add needs ${k}`);
+  isoDate(i.activityDate, "activityDate");
   return {
     path: "/rest/employment-plan/job-search-activity",
     body: { activityDate: i.activityDate, employerName: i.employerName, role: i.role, applicationMethod: i.applicationMethod, applicationMethodDesc: i.applicationMethodDesc ?? null, status: i.status },
@@ -152,7 +153,9 @@ export function register(server: McpServer, session: Session): void {
     },
     (args) =>
       call(session, async (http) => {
-        const body = rjsPayload(args);
+        // the site posts back the id it was given by GET /rest/traffic-light/rjs-activities
+        const id = args.id ?? (await http.get("/rest/traffic-light/rjs-activities"))?.id ?? null;
+        const body = rjsPayload({ ...args, id });
         const request = { method: "POST" as const, path: "/rest/traffic-light/rjs-activities", body };
         const effect = `MSD will record your job-search report for week ${args.weekCode}`;
         if (!args.confirm) return dryRun(request, effect);

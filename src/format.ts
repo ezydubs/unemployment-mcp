@@ -23,6 +23,14 @@ export function day(s: unknown): string {
   return m[4] ? `${base} ${m[4]}:${m[5]}` : base;
 }
 
+/** A calendar date as YYYY-MM-DD that really exists (JavaScript would quietly roll "2026-02-30" over to 2 March). */
+export function isoDate(s: unknown, label = "date"): string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error(`${label} must be a date, YYYY-MM-DD`);
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) throw new Error(`${label} ${s} is not a real calendar date`);
+  return s;
+}
+
 /** The tool result shape every tool returns: summary lines first, then the data as JSON. */
 export function result(summary: string | string[], data: unknown): ToolResult {
   const head = Array.isArray(summary) ? summary.filter((l) => l !== "").join("\n") : summary;

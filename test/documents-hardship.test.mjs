@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const { validateFiles, FILE_RULES, EVIDENCE_TYPES } = await import("../dist/tools/documents.js");
-const { serializeHardship, TEXT } = await import("../dist/tools/hardship.js");
+const { serializeHardship, checkHardshipLimits, TEXT } = await import("../dist/tools/hardship.js");
 
 test("validateFiles enforces the site's upload rules", () => {
   const dir = mkdtempSync(join(tmpdir(), "mymsd-files-"));
@@ -34,7 +34,6 @@ test("serializeHardship mirrors resources/serializers/hardship", () => {
       answers: { chosenCard: "12345678", hasIncome: true, hasIncomeChanged: false, hasAssets: false, haveAssetsChanged: false, whyNotAssets: "bills", stepsTaken: ["budgetingPlanning", "other"], stepsTakenOther: "Sold the car", stepToTake: "reduceCosts", hasTakenPreviousStep: false, agreeToRepayments: true },
     },
     { count: 1, isStpCandidate: false, lastApplication: { stepToTake: "other" }, food: { eligibility: "eligible", maxAmount: 300, balance: 300, sixMonthFoodAllowance: 600, sngAmount: 0 }, dental: { eligibility: "eligible", maxAmount: 1000, sngAmount: 0 } },
-    { dental: ["f1"] },
   );
   assert.equal(out.count, 1);
   assert.equal(out.stpCandidate, false);
@@ -52,15 +51,20 @@ test("serializeHardship mirrors resources/serializers/hardship", () => {
   assert.equal(out.types[0].whatHasHappened, "urgentBill");
   assert.equal(out.types[0].maxAmount, 300);
   assert.equal(out.types[1].typeOfTreatment, "immediateAndEssential");
-  assert.deepEqual(out.evidence, { dental: ["f1"] });
+  assert.equal("evidence" in out, false, "the site's serializer sends no evidence key; uploads are linked by their metadata");
   const none = serializeHardship(
     { types: ["schoolUniforms"], schoolUniforms: { whoFor: "otherChild", howMuchNeed: 50 }, answers: { chosenCard: "1", hasIncome: false, hasAssets: false, haveAssetsChanged: null, whyNotAssets: "other", stepsTaken: ["none", "other"], stepsTakenOther: "x", stepToTake: "other", agreeToRepayments: true } },
     { count: 0, schoolUniforms: { eligibility: "eligible" } },
-    {},
   );
   assert.deepEqual(none.stepsTaken, [TEXT.stepsTaken.none, "x"]);
   assert.equal(none.stepsTakenNone, true);
   assert.equal(none.isStepToTakeOther, true);
   assert.equal(none.isWhyNotAssetsOther, true);
   assert.equal(none.types[0].type, "schoolUniforms");
+});
+
+test("checkHardshipLimits refuses amounts above MSD's limits before anything is sent", () => {
+  assert.throws(() => checkHardshipLimits({ types: ["food"], food: { howMuchNeed: 500 } }, { food: { eligibility: "eligible", maxAmount: 300 } }), /\$300\.00/);
+  assert.throws(() => checkHardshipLimits({ types: ["food"], food: { howMuchNeed: 20000 } }, { food: { eligibility: "eligible" } }), /9,999\.99/);
+  assert.equal(checkHardshipLimits({ types: ["food"], food: { howMuchNeed: 100 } }, { food: { eligibility: "eligible", maxAmount: 300 } }), undefined);
 });

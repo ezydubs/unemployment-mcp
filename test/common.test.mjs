@@ -12,6 +12,7 @@ test("fail maps each error class to an isError result with the next step", () =>
   assert.match(r.content[0].text, /invalid_data: bad/);
   assert.match(r.content[0].text, /"field": "pin"/);
   assert.match(fail(new Error("boom")).content[0].text, /^Error: boom/);
+  assert.match(fail(new NotLoggedInError("MyMSD redirected to /login: the session has ended")).content[0].text, /mymsd_auth/, "every sign-in failure names the next step");
 });
 
 test("dryRun describes the request without sending it", () => {

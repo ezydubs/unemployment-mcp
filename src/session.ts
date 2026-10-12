@@ -124,8 +124,15 @@ export class Session {
     if (!this.jar.has("my.msd.govt.nz")) {
       throw new NotLoggedInError("No MyMSD session. Run mymsd_auth import_chrome (while signed in to my.msd.govt.nz in Chrome) or mymsd_auth login.");
     }
-    let info = await this.checkOrChallenge();
-    if (info.isAuthenticated) return info;
+    let info: SessionInfo | null;
+    try {
+      info = await this.checkOrChallenge();
+    } catch (e) {
+      // a redirect or 401 from /rest/session itself just means "no session": repair it like an isAuthenticated: false
+      if (!(e instanceof NotLoggedInError)) throw e;
+      info = null;
+    }
+    if (info?.isAuthenticated) return info;
     try {
       await repairSso(this.http);
     } catch (e) {
@@ -166,11 +173,11 @@ export class Session {
   /** Runs `fn` against a live session; when the call itself reveals the session died, repairs once and retries once. */
   async run<T>(fn: (http: Http) => Promise<T>): Promise<T> {
     await this.ensure();
+    const before = this.repairs; // captured before the call: a repair another caller finishes meanwhile also counts
     try {
       return await fn(this.http);
     } catch (e) {
       if (!(e instanceof NotLoggedInError || e instanceof BotDefenceError || e instanceof NotPermittedError)) throw e;
-      const before = this.repairs;
       this.checkedAt = 0;
       await this.ensure(true);
       if (this.repairs === before) throw e; // the session was fine: the error is genuine

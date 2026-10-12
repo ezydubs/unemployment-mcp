@@ -85,6 +85,28 @@ test("run retries once after a call reveals the session died, and keeps a genuin
   await assert.rejects(s.run((http) => http.get("/rest/emergency-housing")), NotPermittedError);
 });
 
+test("run retries when a concurrent repair landed while the failing call was in flight", async () => {
+  const s = fresh();
+  script = [() => session(true), () => session(true), () => json({ letters: [] })];
+  let attempts = 0;
+  const r = await s.run(async (http) => {
+    if (attempts++ === 0) {
+      s.repairs++; // another caller's repair finished during this call
+      throw new NotLoggedInError("gone");
+    }
+    return http.get("/rest/letters");
+  });
+  assert.deepEqual(r, { letters: [] });
+});
+
+test("a redirect from /rest/session itself still triggers the SSO repair", async () => {
+  const s = fresh();
+  script = [() => new Response(null, { status: 302, headers: { location: "/login" } }), ...ssoHops(), () => session(true)];
+  const info = await s.ensure();
+  assert.ok(info.isAuthenticated);
+  assert.equal(s.repairs, 1);
+});
+
 test("status reports the jar and timestamps without secrets", async () => {
   const s = fresh();
   script = [() => session(true)];

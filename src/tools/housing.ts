@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { day, result } from "../format.js";
+import { day, isoDate, result } from "../format.js";
 import type { Session } from "../session.js";
 import { call, dryRun, tolerant } from "./common.js";
 import { normalizePhone } from "./profile.js";
@@ -22,7 +22,7 @@ export const housingRegisterPayload = (i: Obj) => ({
 });
 export const emergencyHousingPayload = (i: Obj) => ({
   contactNumber: normalizePhone(i.contactNumber),
-  dateOfNeed: i.dateOfNeed,
+  dateOfNeed: isoDate(i.dateOfNeed, "dateOfNeed"),
   numberOfDependents: String(i.numberOfDependents ?? 0),
   region: i.region,
   town: i.town,
