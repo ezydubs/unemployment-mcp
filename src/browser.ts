@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { promisify } from "node:util";
 import { domainMatches, type Cookie, type CookieJar } from "./jar.js";
-import { DOMAINS, ORIGIN, PROFILE_DIR } from "./paths.js";
+import { DES_ORIGIN, DOMAINS, ORIGIN, PROFILE_DIR } from "./paths.js";
 
 /**
  * The only two things plain HTTP cannot do: run F5's JavaScript challenge to get fresh token cookies, and host a
@@ -39,12 +39,39 @@ export const fromPlaywrightCookie = (c: { name: string; value: string; domain: s
   httpOnly: !!c.httpOnly,
 });
 
+export type Site = "mymsd" | "des";
+/** Where a sign-in starts: MyMSD's dashboard (it bounces to the login), or DES's login servlet returning to My jobs. */
+export const harvestStart = (site: Site = "mymsd"): string => (site === "des" ? `${DES_ORIGIN}/bin/auth/login?rt=${encodeURIComponent("/my-jobs/")}` : `${ORIGIN}/dashboard`);
+
+/** In-page readiness probes (serialised into the page, so no closures): each answers { isAuthenticated } or null. */
+const PROBES = {
+  mymsd: async () => {
+    try {
+      const r = await fetch("/rest/session", { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      return (r.headers.get("content-type") || "").includes("json") ? await r.json() : null;
+    } catch {
+      return null;
+    }
+  },
+  des: async () => {
+    try {
+      const r = await fetch("/bin/auth/check", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const j = (r.headers.get("content-type") || "").includes("json") ? await r.json() : null;
+      return j ? { isAuthenticated: !!j.authenticated } : null;
+    } catch {
+      return null;
+    }
+  },
+};
+
 export interface HarvestOptions {
   jar: Pick<CookieJar, "toJSON">;
   headless: boolean;
   /** wait until /rest/session says isAuthenticated (interactive login) instead of just until it answers JSON (challenge solved) */
   waitForAuth: boolean;
   timeoutMs: number;
+  /** which site to sign in to; default MyMSD */
+  site?: Site;
 }
 
 /** Opens the site in CloakBrowser seeded with the jar, waits for the F5 challenge (and optionally a sign-in) to complete, returns every cookie of ours. */
@@ -55,27 +82,18 @@ export async function harvestCookies(o: HarvestOptions): Promise<Cookie[]> {
   try {
     await ctx.addCookies(o.jar.toJSON().map(toPlaywrightCookie));
     const page = ctx.pages()[0] ?? (await ctx.newPage());
-    await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.goto(harvestStart(o.site), { waitUntil: "domcontentloaded" });
     const deadline = Date.now() + o.timeoutMs;
     let ready = false;
     while (Date.now() < deadline) {
-      const s = await page
-        .evaluate(async () => {
-          try {
-            const r = await fetch("/rest/session", { headers: { "X-Requested-With": "XMLHttpRequest" } });
-            return (r.headers.get("content-type") || "").includes("json") ? await r.json() : null;
-          } catch {
-            return null;
-          }
-        })
-        .catch(() => null);
+      const s = await page.evaluate(PROBES[o.site ?? "mymsd"]).catch(() => null);
       if (s && (!o.waitForAuth || s.isAuthenticated)) {
         ready = true;
         break;
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    if (!ready) throw new Error(o.waitForAuth ? "no sign-in completed before the timeout" : "the browser did not get past MyMSD's bot-defence challenge");
+    if (!ready) throw new Error(o.waitForAuth ? "no sign-in completed before the timeout" : "the browser did not get past the site's bot-defence challenge");
     const cookies: any[] = await ctx.cookies();
     return cookies.filter((c) => DOMAINS.some((d) => domainMatches(d, c.domain))).map(fromPlaywrightCookie);
   } finally {

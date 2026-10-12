@@ -12,3 +12,10 @@ test("cookie conversion to and from Playwright's shape", () => {
   assert.deepEqual(toPlaywrightCookie(c), { ...c, sameSite: "Lax" });
   assert.deepEqual(fromPlaywrightCookie({ ...c, sameSite: "None", expires: 1700000000.5 }), { ...c, expires: 1700000000 });
 });
+
+test("where a sign-in starts: MyMSD's dashboard, or DES's login servlet returning to My jobs", async () => {
+  const { harvestStart } = await import("../dist/browser.js");
+  assert.equal(harvestStart(), "https://my.msd.govt.nz/dashboard");
+  assert.equal(harvestStart("mymsd"), "https://my.msd.govt.nz/dashboard");
+  assert.equal(harvestStart("des"), "https://new.my.msd.govt.nz/bin/auth/login?rt=%2Fmy-jobs%2F");
+});
