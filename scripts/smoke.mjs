@@ -62,6 +62,12 @@ await tool("mymsd_employment_plan");
 await tool("mymsd_jobs");
 await tool("mymsd_job_title_search", { query: "cook" });
 await tool("mymsd_address_search", { query: "1 Queen Street" });
+await tool("mymsd_one_off_costs", { types: ["food"] });
+await tool("mymsd_medical_certificate");
+await tool("mymsd_housing");
+await tool("mymsd_applications");
+await tool("mymsd_tas");
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
+await tool("mymsd_medical_certificate_ready_to_work", { confirm: false });
 
 p.kill();
