@@ -112,6 +112,23 @@ Called by the app on every load and as keep-alive. Expected (not yet observed) w
 - Direct RealMe redirect helper (`resources/utils/redirect-to-realme`):
   `/saml2/authenticate/realme?from=<state>&allowCreate=<bool>&token=<token>&rememberMe=<bool>&realme=realme`.
 
+### 5.2a What the silent flow does without an IdP session (tested 2026-10-12, server build)
+
+- `GET /idpsaml/ciamsession` → `/saml2/authenticate/ciam` is a **passive** SAML check: B2C answers at once with a
+  SAML error response (page title "Logging in...", auto-post form to `/session/login/samlResponse`), and MyMSD's
+  callback comes back as `/realme/callback?status=failure&intendedUrl=/dashboard&rememberMe=false`. No UI is ever
+  offered on this path.
+- The interactive entry `/saml2/authenticate/realme?from=login&allowCreate=false&token=&rememberMe=true&realme=realme`
+  posts to B2C, which 302s to RealMe's own B2C
+  (`login.realme.govt.nz/b2cdiaprdrmpubdir.onmicrosoft.com/B2C_1A_DIA_RealMe_LoginService/samlp/sso/login?SAMLRequest=…`);
+  that page is a JavaScript-only login UI ("We can't sign you in. Your browser is currently set to block JavaScript")
+  and RealMe's own SSO cookies did not sign in without it. A person is needed from here.
+- B2C's `x-ms-cpim-sso:msdciam.onmicrosoft.com_0` is rotated when it is used: a copy taken from Chrome after another
+  client (the cloakbrowser profile) had used it was rejected, and B2C's error response cleared it from the jar.
+- The SPA's own idle timeout (`doLogout("timeout", true)`) navigates to `/idpsaml/saml/manual-slo?reason=timeout`,
+  a SAML single logout that ends the B2C session for every client. A MyMSD tab left open in any browser therefore
+  kills silent re-login for the MCP too.
+
 ### 5.3 Client-number + PIN sign-in (from code)
 
 - `POST /session/login/pin` body `{ clientNumber, dateOfBirth: "YYYY-MM-DD", pin (4 digits), rememberMe: "true"|"false" }`
