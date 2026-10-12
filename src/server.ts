@@ -2,16 +2,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Session } from "./session.js";
+import * as appointments from "./tools/appointments.js";
 import * as auth from "./tools/auth.js";
 import * as benefits from "./tools/benefits.js";
 import * as dashboard from "./tools/dashboard.js";
+import * as income from "./tools/income.js";
 import * as letters from "./tools/letters.js";
 import * as money from "./tools/money.js";
 
 const server = new McpServer({ name: "mymsd", version: "0.1.0" });
 const session = Session.load();
 
-for (const mod of [auth, dashboard, benefits, letters, money]) mod.register(server, session);
+for (const mod of [auth, dashboard, benefits, letters, money, appointments, income]) mod.register(server, session);
 
 async function main() {
   await server.connect(new StdioServerTransport());

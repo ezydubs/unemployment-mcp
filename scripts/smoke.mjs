@@ -55,6 +55,9 @@ await tool("mymsd_letters", { unreadOnly: false });
 await tool("mymsd_debt");
 await tool("mymsd_finance");
 await tool("mymsd_cards", { transactions: true });
+await tool("mymsd_appointments", { includeLocations: true });
+await tool("mymsd_appointment_check", { reasonIds: ["changeAddress"] });
+await tool("mymsd_income");
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 
 p.kill();
