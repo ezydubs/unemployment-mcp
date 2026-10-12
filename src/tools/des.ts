@@ -381,23 +381,101 @@ export function register(server: McpServer, session: Session): void {
   registerAccountTools(server, session, { open, signedIn });
 }
 
-/** des_auth, des_apply and des_cv — Task 6 fills this in. */
-function registerAccountTools(server: McpServer, session: Session, helpers: { open: Runner; signedIn: Runner }): void {
-  void server;
-  void session;
-  void helpers;
-  void mkdirSync;
-  void writeFileSync;
-  void tmpdir;
-  void dirname;
-  void join;
-  void browserAvailable;
-  void harvestCookies;
-  void harvestStart;
-  void openInChrome;
-  void readChromeCookies;
-  void DES_DOMAINS;
-  void dryRun;
-  void whoami;
-  void extFor;
+/** des_auth, des_apply and des_cv. */
+function registerAccountTools(server: McpServer, session: Session, { signedIn }: { open: Runner; signedIn: Runner }): void {
+  const des = session.des;
+
+  server.registerTool(
+    "des_auth",
+    {
+      description:
+        "Sign-in state and sign-in actions for DES (new.my.msd.govt.nz). status: who is signed in, how long the session has left, which cookies are held. " +
+        "import_chrome: take the sign-in from Google Chrome's Default profile (be signed in at new.my.msd.govt.nz there). " +
+        "login: open a browser window at the DES sign-in (the optional CloakBrowser when installed; otherwise your own browser, after which you run import_chrome). " +
+        "forget: drop the DES cookies and state only. The session repairs itself through MSD's identity provider while its single-sign-on cookie lasts.",
+      inputSchema: {
+        action: z.enum(["status", "import_chrome", "login", "forget"]).default("status"),
+        chromeProfile: z.string().optional().describe('Chrome profile folder, default "Default"'),
+      },
+    },
+    async (args) => {
+      try {
+        switch (args.action) {
+          case "status": {
+            if (des.hasCookies() || des.hasSso()) await des.ensure().catch(() => {});
+            return result([whoami(des), `Optional browser installed: ${await browserAvailable()}`], des.status());
+          }
+          case "import_chrome": {
+            const cookies = (await readChromeCookies({ profile: args.chromeProfile, domains: DES_DOMAINS })).filter((c) => c.value !== "");
+            if (!cookies.some((c) => c.domain === "new.my.msd.govt.nz" && c.name.startsWith("__Host-"))) {
+              return desFail(new Error("Chrome holds no DES sign-in (its new.my.msd.govt.nz cookies are missing or empty). Sign in at new.my.msd.govt.nz in Chrome, then run this again."));
+            }
+            des.addCookies(cookies);
+            const info = await des.ensure(true);
+            return result([`Imported ${cookies.length} cookies from Chrome. ${whoami(des)}`], { imported: cookies.map((c) => `${c.domain} ${c.name}`), signedIn: info.authenticated });
+          }
+          case "login": {
+            if (await browserAvailable()) {
+              des.addCookies(await harvestCookies({ jar: session.jar, headless: false, waitForAuth: true, timeoutMs: 5 * 60_000, site: "des" }));
+              await des.ensure(true);
+              return result([`Signed in through the browser window. ${whoami(des)}`], des.status());
+            }
+            await openInChrome(harvestStart("des"));
+            return result(["Opened the DES sign-in in your browser. Sign in there, then run des_auth import_chrome."], { browserInstalled: false });
+          }
+          case "forget": {
+            des.forget();
+            return result(["Forgot the DES session (the MyMSD and RealMe cookies are kept)."], des.status());
+          }
+        }
+      } catch (e) {
+        return desFail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "des_apply",
+    {
+      description:
+        "Apply for a job on DES — the site's three-step flow in one call: which CV (existing = the CV MSD already holds; own = you email your CV back on the confirmation email), whether you have a referee, then submit. " +
+        "Checks first that you have not applied, the job is Open and not closed, and nothing on your record blocks online applications. Dry run unless confirm: true.",
+      inputSchema: {
+        id: z.string().min(1).describe("the job's vacancy id"),
+        cv: z.enum(["existing", "own"]).describe("existing: use the CV MSD already has; own: send your own CV by replying to the confirmation email"),
+        reference: z.enum(["Yes", "No"]).describe("do you have someone who can be your reference"),
+        confirm: z.boolean().default(false).describe("send it; without this the exact request is shown and nothing is sent"),
+      },
+    },
+    async (args) =>
+      signedIn(async (http) => {
+        const detail = (await http.api("/bin/sep/vacancies/details", undefined, { vacancyId: args.id }))?.results ?? {};
+        const title = detail.vacancyDetails?.vacancyTitle ?? args.id;
+        const problems = applyChecks(detail);
+        if (problems.length) return desFail(new Error(`cannot apply for ${title}: ${problems.join("; ")}`));
+        const csrf = http.csrfToken();
+        if (!csrf) return desFail(new NotLoggedInError(`DES has not given this session a __Host-csrf cookie. ${DES_NEXT_STEP}`));
+        const request = applyRequest(args.id, args.cv, args.reference, csrf);
+        const effect = `an application for "${title}" (job ${args.id}) will be submitted with ${args.cv === "existing" ? "the CV MSD already holds" : "your own CV, which you then email back on the confirmation email"} and reference: ${args.reference}`;
+        if (!args.confirm) return dryRun({ method: "POST", path: request.path.replace(/csrf=.*/, "csrf=<__Host-csrf>"), body: request.body }, effect, { job: summarizeJob(detail).slice(0, 3) });
+        const r = (await http.api(request.path, request.body))?.results ?? {};
+        return result([`Applied for ${title}: application ${r.applicationFormName ?? "?"} (${r.applicationFormId ?? "?"}).${args.cv === "own" ? " Reply to MSD's confirmation email with your CV attached." : ""}`], r);
+      }),
+  );
+
+  server.registerTool(
+    "des_cv",
+    {
+      description: "Download the CV MSD holds for you from DES. Signed in.",
+      inputSchema: { path: z.string().optional().describe("where to save it; default: the temp dir, named as the site names it") },
+    },
+    async (args) =>
+      signedIn(async (http) => {
+        const f = await http.fetchFile("/bin/bff/cv");
+        const to = args.path ?? join(tmpdir(), f.filename ?? `mymsd-des-cv${extFor(f.contentType)}`);
+        mkdirSync(dirname(to), { recursive: true });
+        writeFileSync(to, f.bytes);
+        return result([`Saved your CV (${f.bytes.length} bytes, ${f.contentType}) to ${to}`], { path: to, bytes: f.bytes.length, contentType: f.contentType, filename: f.filename });
+      }),
+  );
 }
