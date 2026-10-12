@@ -8,7 +8,7 @@ cards, appointments and availability, income, employment plan, jobs, one-off cos
 certificate, housing, applications, TAS. Actions: declare wages, book/cancel/call-back appointments, update contact
 details, address and accommodation costs, letters by post or email, job-search and obligation reporting, card PIN,
 document upload, hardship application, Housing Register check-in, emergency housing, medical-certificate ready-to-work,
-application steps, TAS, boarder declarations. 42 tools, all prefixed `mymsd_`.
+application steps, TAS, boarder declarations. 42 tools, all prefixed `mymsd_`, plus 9 `des_` tools for DES, the jobs site.
 
 ## Install
 
@@ -40,6 +40,15 @@ in any browser signs you out of RealMe entirely after 15 idle minutes (the site'
 Close MyMSD tabs you are not using. The server itself never signs you out.
 
 Session file: `~/.mymsd-mcp/session.json` (cookies only, mode 600). `mymsd_auth forget` deletes it.
+
+## DES — the jobs site (new.my.msd.govt.nz)
+
+MyMSD hands job search, matches and applications to DES ("MyMSD new"). The same server covers it with `des_` tools:
+`des_search`, `des_job` and `des_locations` need no sign-in; `des_matches`, `des_profile`, `des_applications`,
+`des_apply` (dry run by default) and `des_cv` need `des_auth` — `import_chrome` after signing in at
+new.my.msd.govt.nz in Chrome, or `login` for a browser window. DES sessions idle out after 14 minutes; the server
+replays the sign-in silently through MSD's identity provider while its single-sign-on cookie lasts. The jobseeker
+profile itself is edited on the site (an AEM form wizard), contact details on MyMSD. Details: `NATIVE-NOTES.md` §11.
 
 ## Writes are dry runs by default
 

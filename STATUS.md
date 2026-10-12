@@ -82,3 +82,19 @@ exactly 15 minutes later, and the identity-provider cookies vanished. The MCP's 
 4. Real writes with you, one at a time.
 5. PIN fallback if you say yes.
 6. DES tools if you say yes.
+
+
+## DES (new.my.msd.govt.nz, "MyMSD new") — added 2026-10-12, later the same day
+
+- **Built and tested:** 9 `des_` tools on branch `des` (search, job, locations, matches, profile, applications, apply,
+  CV download, auth), 36 new unit tests (106 total, green). Native all the way: the only trick needed was using
+  `node:https` for the sign-in hops, because Node's `fetch` adds a header DES's login servlet refuses.
+- **Verified live:** `des_locations`, `des_search` and `des_job` return real data without any sign-in. The signed-in
+  tools correctly say "No DES session" until there is one.
+- **Not yet verified live:** the signed-in tools and the silent sign-in replay. A DES sign-in is needed once (Chrome at
+  new.my.msd.govt.nz then `des_auth import_chrome`, or `des_auth login`). In the cloakbrowser window a RealMe sign-in
+  came back from DES with "We couldn't log you in right now — your account isn't able to access this system"
+  (`error/login?code=idp_error`): that is DES refusing, not the MCP. Try "Log in with MyMSD" on DES's login chooser, or
+  open DES from a MyMSD dashboard link.
+- **No application has been sent.** `des_apply` stops at its dry run (and refuses on its own when a job is not open,
+  already applied for, closed, or the record carries a blocking flag).

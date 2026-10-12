@@ -46,7 +46,8 @@ await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clie
 p.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
 console.log("tools:", (await call("tools/list", {})).tools.map((t) => t.name).join(", "));
 
-// SMOKE_IMPORT=1 takes the sign-in from Chrome first (needed once, or after the RealMe sign-in has lapsed)
+// SMOKE_IMPORT=1 takes the sign-in from Chrome first (needed once, or after the RealMe sign-in has lapsed); SMOKE_ONLY=des skips the MyMSD part
+if (process.env.SMOKE_ONLY !== "des") {
 if (process.env.SMOKE_IMPORT) await tool("mymsd_auth", { action: "import_chrome" });
 await tool("mymsd_auth", { action: "status" });
 // READ TOOLS (added by later tasks)
@@ -106,5 +107,22 @@ await tool("mymsd_emergency_housing_request", { contactNumber: "021 000 0000", d
 await tool("mymsd_boarders_declaration", { declarationId: "0", form: {}, confirm: false });
 await tool("mymsd_application_action", { action: "accept_obligations", referenceNumber: "0", confirm: false });
 await tool("mymsd_tas_submit", { payload: { assets: [] }, confirm: false });
+}
+
+// DES (new.my.msd.govt.nz): the public tools need no sign-in; the rest use the DES session (SMOKE_IMPORT=1 imports it from Chrome)
+if (process.env.SMOKE_IMPORT) await tool("des_auth", { action: "import_chrome" });
+await tool("des_auth", { action: "status" });
+await tool("des_locations", { query: "auck" });
+const search = await tool("des_search", { query: "cleaner", regions: ["Auckland Region"], limit: 5 });
+let firstJob = "30070041";
+try {
+  firstJob = JSON.parse(search.split("\n\n").slice(1).join("\n\n")).suitableVacancies?.[0]?.vacancyId ?? firstJob;
+} catch {}
+await tool("des_job", { id: firstJob });
+await tool("des_matches", { limit: 3 });
+await tool("des_profile");
+await tool("des_applications");
+await tool("des_apply", { id: firstJob, cv: "existing", reference: "No", confirm: false });
+await tool("des_cv", {});
 
 p.kill();
