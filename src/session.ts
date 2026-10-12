@@ -1,5 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { browserAvailable, harvestCookies } from "./browser.js";
+import { DesSession, type DesStored } from "./des-session.js";
 import { BotDefenceError, Http, NotLoggedInError, NotPermittedError, SsoDeadError } from "./http.js";
 import { CookieJar, type Cookie } from "./jar.js";
 import { DOMAINS, SESSION_FILE, STORE_DIR } from "./paths.js";
@@ -29,6 +30,7 @@ interface Stored {
   info: SessionInfo | null;
   checkedAt: number;
   importedAt: number | null;
+  des?: DesStored;
 }
 
 const NEXT_STEP = "Sign in again: mymsd_auth login, or sign in at my.msd.govt.nz in Chrome and run mymsd_auth import_chrome.";
@@ -37,6 +39,8 @@ const NEXT_STEP = "Sign in again: mymsd_auth login, or sign in at my.msd.govt.nz
 export class Session {
   readonly jar: CookieJar;
   readonly http: Http;
+  /** the DES (jobs site) half, on the same jar */
+  readonly des: DesSession;
   info: SessionInfo | null;
   checkedAt: number;
   importedAt: number | null;
@@ -51,6 +55,7 @@ export class Session {
     this.importedAt = stored?.importedAt ?? null;
     this.http = new Http(this.jar, () => this.save());
     this.http.csrfToken = this.info?.csrfToken ?? null;
+    this.des = new DesSession(this.jar, () => this.save(), stored?.des);
   }
 
   static load(): Session {
@@ -63,7 +68,7 @@ export class Session {
 
   save(): void {
     mkdirSync(STORE_DIR, { recursive: true });
-    const stored: Stored = { cookies: this.jar.toJSON(), info: this.info, checkedAt: this.checkedAt, importedAt: this.importedAt };
+    const stored: Stored = { cookies: this.jar.toJSON(), info: this.info, checkedAt: this.checkedAt, importedAt: this.importedAt, des: this.des.toJSON() };
     writeFileSync(SESSION_FILE, JSON.stringify(stored, null, 2));
     chmodSync(SESSION_FILE, 0o600);
   }
@@ -75,6 +80,8 @@ export class Session {
     this.checkedAt = 0;
     this.importedAt = null;
     this.http.csrfToken = null;
+    this.des.info = null;
+    this.des.checkedAt = 0;
   }
 
   addCookies(cookies: Cookie[]): void {
