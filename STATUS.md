@@ -91,10 +91,12 @@ exactly 15 minutes later, and the identity-provider cookies vanished. The MCP's 
   `node:https` for the sign-in hops, because Node's `fetch` adds a header DES's login servlet refuses.
 - **Verified live:** `des_locations`, `des_search` and `des_job` return real data without any sign-in. The signed-in
   tools correctly say "No DES session" until there is one.
-- **Not yet verified live:** the signed-in tools and the silent sign-in replay. A DES sign-in is needed once (Chrome at
-  new.my.msd.govt.nz then `des_auth import_chrome`, or `des_auth login`). In the cloakbrowser window a RealMe sign-in
-  came back from DES with "We couldn't log you in right now — your account isn't able to access this system"
-  (`error/login?code=idp_error`): that is DES refusing, not the MCP. Try "Log in with MyMSD" on DES's login chooser, or
-  open DES from a MyMSD dashboard link.
+- **Verified live, signed in (2026-10-12, 20:57 NZ):** `mymsd_auth import_chrome` after a fresh RealMe sign-in brought
+  both sites' cookies plus the identity-provider SSO cookie; `mymsd_dashboard` answered; `des_auth status` signed in
+  (profile Complete, Active); `des_applications` (none), `des_matches` (5 partial matches), `des_profile` (full) all
+  answered with real data; `des_apply` stopped at its dry run with the masked csrf token. `des_cv` got **HTTP 500 "AEM
+  Cloud Service"** from DES's own `/bin/bff/cv` — DES's side (most likely no CV document on file), nothing to fix here.
+- **Still untested live:** the silent DES sign-in replay — the imported session was live, so no repair ran; it gets its
+  first real run when the 14-minute DES session lapses and the next `des_` call repairs through the SSO cookie.
 - **No application has been sent.** `des_apply` stops at its dry run (and refuses on its own when a job is not open,
   already applied for, closed, or the record carries a blocking flag).

@@ -55,12 +55,14 @@ with confirm, matches 404, CV save, auth status/forget).
 closing date, link), `des_job` (full detail with description). The signed-in tools answer "No DES session" with the
 sign-in hint until a DES session exists.
 
-### Not yet verified live
+### Verified live, signed in (2026-10-12, 20:57 NZ)
 
-The signed-in tools and the silent sign-in replay — a DES sign-in is needed once. The RealMe sign-in attempted in the
-cloakbrowser window was refused by DES itself ("your account isn't able to access this system", `code=idp_error`);
-"Log in with MyMSD" on DES's chooser, or a MyMSD dashboard link into DES, is the next thing to try. No job application
-has been sent.
+After a fresh RealMe sign-in in Chrome, `mymsd_auth import_chrome` carried both sites' cookies and the identity
+provider's SSO cookie: `mymsd_dashboard`, `des_auth status` (profile Complete, Active), `des_applications`,
+`des_matches`, `des_profile` all answered with real data; `des_apply` stopped at its dry run. `des_cv` received HTTP
+500 "AEM Cloud Service" from DES's own `/bin/bff/cv` (DES's side; most likely no CV document on file). Still untested:
+the silent sign-in replay (the imported session was live, so no repair was needed yet). No job application has been
+sent.
 
 ### Fresh review (whole branch) and the fix pass
 
