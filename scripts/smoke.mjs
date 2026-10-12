@@ -50,6 +50,8 @@ await tool("mymsd_auth", { action: "status" });
 // READ TOOLS (added by later tasks)
 await tool("mymsd_dashboard");
 await tool("mymsd_profile");
+await tool("mymsd_benefits", { detail: true });
+await tool("mymsd_letters", { unreadOnly: false });
 // WRITE TOOLS AS DRY RUNS (added by later tasks)
 
 p.kill();
