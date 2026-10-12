@@ -15,12 +15,13 @@ import * as letters from "./tools/letters.js";
 import * as lookups from "./tools/lookups.js";
 import * as medical from "./tools/medical.js";
 import * as money from "./tools/money.js";
+import * as profile from "./tools/profile.js";
 import * as tas from "./tools/tas.js";
 
 const server = new McpServer({ name: "mymsd", version: "0.1.0" });
 const session = Session.load();
 
-for (const mod of [auth, dashboard, benefits, letters, money, appointments, income, employment, lookups, hardship, medical, housing, applications, tas]) {
+for (const mod of [auth, dashboard, benefits, letters, money, appointments, income, employment, lookups, hardship, medical, housing, applications, tas, profile]) {
   mod.register(server, session);
 }
 

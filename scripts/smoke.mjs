@@ -74,5 +74,8 @@ await tool("mymsd_declare_wages", { weekStarting: "2026-10-05", didNotWork: true
 await tool("mymsd_appointment_book", { reasonIds: ["changeAddress"], category: "PHONE", date: "2026-11-02 09:00", locationId: "ASMR", confirm: false });
 await tool("mymsd_appointment_cancel", { appointmentId: "0", confirm: false });
 await tool("mymsd_appointment_callback", { contactNumber: "0210000000", reasonIds: ["benefitReapp"], confirm: false });
+await tool("mymsd_contact_update", { workEmail: "example@example.com", confirm: false });
+await tool("mymsd_accommodation_update", { accommodationCosts: { type: "rent", amount: 1, landlordName: "Example" }, confirm: false });
+await tool("mymsd_letters_preference", { action: "post", confirm: false });
 
 p.kill();
